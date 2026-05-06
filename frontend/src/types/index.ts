@@ -2,6 +2,20 @@ export interface PredictionReason {
   text: string;
 }
 
+export interface TeamStats {
+  net_rating: number;
+  off_rating: number;
+  def_rating: number;
+  efg_pct: number;
+  tov_pct: number;
+  oreb_pct: number;
+  w_pct: number;
+  elo: number;
+  recent_win_pct: number;
+  recent_net_rtg: number;
+  rest_days: number;
+}
+
 export interface GamePrediction {
   game_id: string;
   home_team: string;
@@ -13,6 +27,9 @@ export interface GamePrediction {
   reasons: PredictionReason[];
   game_date: string;
   status: string;
+  home_stats?: TeamStats;
+  away_stats?: TeamStats;
+  model_version?: string;
 }
 
 export interface AccuracyStats {
@@ -20,4 +37,6 @@ export interface AccuracyStats {
   correct_predictions: number;
   accuracy_percentage: number;
   last_updated: string;
+  model_cv_accuracy?: number;
+  model_version?: string;
 }

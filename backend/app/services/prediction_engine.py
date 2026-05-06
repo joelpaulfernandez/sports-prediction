@@ -1,127 +1,128 @@
+"""
+Prediction engine.
+
+On init, tries to load a persisted XGBoost model from disk.  If no model
+exists, all predictions fall back to a multi-signal rule-based heuristic
+(net rating + Elo + win%) while training runs in the background.
+
+Call reload_model() after training completes to hot-swap the model without
+restarting the server.
+"""
+
+import os
+from typing import Optional
+
 import numpy as np
 
-try:
-    import xgboost as xgb
-    XGB_AVAILABLE = True
-except ImportError:
-    XGB_AVAILABLE = False
+from app.services.feature_engineering import build_features, FEATURE_NAMES
+from app.config import get_settings
 
 
 class PredictionEngine:
-    """XGBoost-backed prediction engine with a rule-based fallback."""
-
     def __init__(self) -> None:
-        self.model = None
-        self._is_trained = False
+        self._model = None
+        self._feature_names: list[str] = FEATURE_NAMES
+        self._cv_accuracy: Optional[float] = None
+        self._n_training_games: Optional[int] = None
+        self._model_version: str = "rule-based"
+        self._try_load()
 
     # ------------------------------------------------------------------
-    # Feature extraction
+    # Model lifecycle
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _extract_features(home_stats: dict, away_stats: dict) -> np.ndarray:
-        """Return a 1-D feature array for a single matchup."""
-
-        def safe_float(value, default: float = 0.0) -> float:
-            try:
-                return float(value)
-            except (TypeError, ValueError):
-                return default
-
-        def win_pct(stats: dict) -> float:
-            wins = safe_float(stats.get("wins", {}).get("all", {}).get("total", 0))
-            losses = safe_float(stats.get("losses", {}).get("all", {}).get("total", 0))
-            total = wins + losses
-            return wins / total if total > 0 else 0.5
-
-        def avg_ppg(stats: dict) -> float:
-            return safe_float(
-                stats.get("points", {}).get("for", {}).get("average", {}).get("all", 105)
-            )
-
-        home_win_pct = win_pct(home_stats)
-        away_win_pct = win_pct(away_stats)
-        home_recent_ppg = avg_ppg(home_stats)
-        away_recent_ppg = avg_ppg(away_stats)
-        home_is_home_advantage = 1.0
-
-        return np.array(
-            [home_win_pct, away_win_pct, home_recent_ppg, away_recent_ppg, home_is_home_advantage],
-            dtype=np.float32,
-        )
-
-    # ------------------------------------------------------------------
-    # Training
-    # ------------------------------------------------------------------
-
-    def train_model(self, X: np.ndarray, y: np.ndarray) -> None:
-        """Train the XGBoost classifier.
-
-        Args:
-            X: Feature matrix, shape (n_samples, 5).
-            y: Binary labels — 1 if home team won, 0 otherwise.
-        """
-        if not XGB_AVAILABLE:
-            print("xgboost not installed — skipping training.")
+    def _try_load(self) -> None:
+        try:
+            import joblib
+        except ImportError:
             return
 
-        self.model = xgb.XGBClassifier(
-            n_estimators=100,
-            max_depth=4,
-            learning_rate=0.1,
-            use_label_encoder=False,
-            eval_metric="logloss",
-            random_state=42,
-        )
-        self.model.fit(X, y)
-        self._is_trained = True
+        path = get_settings().model_path
+        if not os.path.exists(path):
+            print("[engine] No model file found — using rule-based fallback.")
+            return
+
+        try:
+            artifact = joblib.load(path)
+            self._model = artifact["model"]
+            self._feature_names = artifact.get("feature_names", FEATURE_NAMES)
+            self._cv_accuracy = artifact.get("cv_accuracy")
+            self._n_training_games = artifact.get("n_training_games")
+            self._model_version = "xgboost-v1"
+            print(
+                f"[engine] Model loaded — CV accuracy: {self._cv_accuracy:.3f} "
+                f"over {self._n_training_games} games."
+            )
+        except Exception as exc:
+            print(f"[engine] Failed to load model: {exc}")
+
+    def reload_model(self) -> None:
+        """Hot-reload from disk after a training run completes."""
+        self._model = None
+        self._model_version = "rule-based"
+        self._try_load()
 
     # ------------------------------------------------------------------
-    # Prediction helpers
+    # Public properties
     # ------------------------------------------------------------------
 
-    def predict(self, features: np.ndarray) -> tuple[int, float]:
-        """Return (predicted_label, confidence) for a single feature row."""
-        if not self._is_trained or self.model is None:
-            raise RuntimeError("Model not trained yet.")
-        proba = self.model.predict_proba(features.reshape(1, -1))[0]
-        label = int(np.argmax(proba))
-        confidence = float(proba[label])
-        return label, confidence
+    @property
+    def is_trained(self) -> bool:
+        return self._model is not None
+
+    @property
+    def model_version(self) -> str:
+        return self._model_version
+
+    @property
+    def cv_accuracy(self) -> Optional[float]:
+        return self._cv_accuracy
 
     # ------------------------------------------------------------------
-    # Public API
+    # Core prediction
     # ------------------------------------------------------------------
 
-    def generate_prediction(self, home_team_stats: dict, away_team_stats: dict) -> dict:
-        """Generate a prediction for a single matchup.
-
-        Returns a dict with:
-          - predicted_winner_is_home: bool
-          - confidence: float (0–1)
-          - predicted_home_score: int
-          - predicted_away_score: int
+    def generate_prediction(
+        self,
+        home_stats: dict,
+        away_stats: dict,
+        home_recent: dict,
+        away_recent: dict,
+        home_elo: float,
+        away_elo: float,
+        home_rest: int = 3,
+        away_rest: int = 3,
+    ) -> dict:
         """
-        features = self._extract_features(home_team_stats, away_team_stats)
+        Return prediction dict:
+          predicted_winner_is_home, confidence, predicted_home_score,
+          predicted_away_score, feature_vector (np.ndarray).
+        """
+        features = build_features(
+            home_stats, away_stats,
+            home_recent, away_recent,
+            home_elo, away_elo,
+            home_rest, away_rest,
+        )
 
-        if self._is_trained and XGB_AVAILABLE:
-            label, confidence = self.predict(features)
-            home_wins = bool(label == 1)
+        if self._model is not None:
+            proba = self._model.predict_proba(features.reshape(1, -1))[0]
+            label = int(np.argmax(proba))
+            confidence = float(proba[label])
+            home_wins = label == 1
         else:
-            home_wins, confidence = self._rule_based_prediction(features)
+            home_wins, confidence = self._rule_based(features)
 
-        home_ppg = features[2]
-        away_ppg = features[3]
+        home_ppg = float(home_stats.get("ppg", 110.0))
+        away_ppg = float(away_stats.get("ppg", 110.0))
 
-        # Add a small home-court bump and some variance
-        home_score = int(round(home_ppg * 1.01 + (2 if home_wins else -2)))
-        away_score = int(round(away_ppg * 0.99 + (-2 if home_wins else 2)))
+        # Predicted score: use each team's PPG with a small winner/loser nudge
+        home_score = int(round(home_ppg + (3 if home_wins else -3)))
+        away_score = int(round(away_ppg + (-3 if home_wins else 3)))
+        home_score = max(88, min(145, home_score))
+        away_score = max(88, min(145, away_score))
 
-        # Ensure scores are in a realistic range
-        home_score = max(85, min(145, home_score))
-        away_score = max(85, min(145, away_score))
-
-        # Make sure the winning team actually has a higher predicted score
+        # Guarantee winning team has the higher score
         if home_wins and home_score <= away_score:
             home_score = away_score + 4
         elif not home_wins and away_score <= home_score:
@@ -132,24 +133,38 @@ class PredictionEngine:
             "confidence": round(confidence, 4),
             "predicted_home_score": home_score,
             "predicted_away_score": away_score,
+            "features": features,
         }
 
     # ------------------------------------------------------------------
-    # Rule-based fallback
+    # Rule-based fallback (used when no model is trained)
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _rule_based_prediction(features: np.ndarray) -> tuple[bool, float]:
-        """Simple heuristic: higher win% wins, with home-court tie-break."""
-        home_win_pct, away_win_pct, home_ppg, away_ppg, _ = features
+    def _rule_based(features: np.ndarray) -> tuple[bool, float]:
+        """
+        Multi-signal heuristic using net rating, Elo, and win%.
+        Weights chosen to approximate XGBoost feature importances.
+        """
+        net_diff  = float(features[0])   # net_rtg_diff
+        elo_diff  = float(features[14])  # elo_diff (already /100)
+        wp_diff   = float(features[9])   # win_pct_diff
+        rec_diff  = float(features[12])  # recent_win_pct_diff
+        rest_diff = float(features[15])  # rest_diff
 
-        # Home advantage adds a small bonus
-        adjusted_home = home_win_pct + 0.03
-        home_wins = adjusted_home >= away_win_pct
+        score = (
+            net_diff  * 0.40
+            + elo_diff * 40.0   # un-normalise back to ~rating points scale
+            + wp_diff  * 8.0
+            + rec_diff * 5.0
+            + rest_diff * 0.8   # rest advantage
+        )
 
-        diff = abs(adjusted_home - away_win_pct)
-        # Clamp confidence between 0.50 and 0.85
-        confidence = min(0.85, max(0.50, 0.50 + diff * 2.0))
+        home_wins = score >= 0.0
+
+        # Sigmoid-like confidence mapping
+        abs_score = abs(score)
+        confidence = min(0.84, 0.52 + abs_score * 0.018)
 
         return home_wins, float(confidence)
 
