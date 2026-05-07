@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_key: str = ""
     redis_url: str = "redis://localhost:6379"
+    allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     model_config = {"env_file": ".env", "case_sensitive": False}
 

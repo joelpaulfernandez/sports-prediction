@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import predictions, accuracy
+from app.config import get_settings
 
 app = FastAPI(
     title="StatCast — Sports Prediction API",
@@ -9,10 +10,12 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Allow the Vite dev server to call the API
+settings = get_settings()
+origins = [o.strip() for o in settings.allowed_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
