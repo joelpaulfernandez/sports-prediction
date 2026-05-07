@@ -1,5 +1,9 @@
+import { useState } from 'react';
 import { Home } from './pages/Home';
+import { Bracket } from './pages/Bracket';
 import './App.css';
+
+type View = 'predictions' | 'bracket';
 
 function HexLogo() {
   return (
@@ -15,7 +19,43 @@ function HexLogo() {
   );
 }
 
-function Header() {
+function NavButton({ label, target, view, onChange }: { label: string; target: View; view: View; onChange: (v: View) => void }) {
+  const active = view === target;
+  return (
+    <button
+      onClick={() => onChange(target)}
+      style={{
+        fontFamily: 'var(--font-body)',
+        fontSize: '13px',
+        fontWeight: active ? 600 : 500,
+        color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+        padding: '6px 14px',
+        borderRadius: '6px',
+        background: active ? 'var(--primary-dim)' : 'transparent',
+        border: active ? '1px solid rgba(59,130,246,0.22)' : '1px solid transparent',
+        cursor: 'pointer',
+        transition: 'color 0.15s, background 0.15s, border-color 0.15s',
+        letterSpacing: '0.01em',
+      }}
+      onMouseEnter={(e) => {
+        if (!active) {
+          (e.currentTarget as HTMLElement).style.color = 'var(--text-primary)';
+          (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.05)';
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!active) {
+          (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)';
+          (e.currentTarget as HTMLElement).style.background = 'transparent';
+        }
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function Header({ view, onChange }: { view: View; onChange: (v: View) => void }) {
   return (
     <header style={{
       position: 'sticky',
@@ -66,35 +106,8 @@ function Header() {
 
         {/* Center nav */}
         <nav style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-          {([
-            { label: 'Predictions', href: '/' },
-            { label: 'Accuracy', href: '#accuracy' },
-          ] as const).map(({ label, href }) => (
-            <a
-              key={label}
-              href={href}
-              style={{
-                fontFamily: 'var(--font-body)',
-                fontSize: '13px',
-                fontWeight: 500,
-                color: 'var(--text-secondary)',
-                padding: '6px 14px',
-                borderRadius: '6px',
-                transition: 'color 0.15s, background 0.15s',
-                letterSpacing: '0.01em',
-              }}
-              onMouseEnter={e => {
-                (e.currentTarget as HTMLElement).style.color = 'var(--text-primary)';
-                (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.05)';
-              }}
-              onMouseLeave={e => {
-                (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)';
-                (e.currentTarget as HTMLElement).style.background = 'transparent';
-              }}
-            >
-              {label}
-            </a>
-          ))}
+          <NavButton label="Predictions" target="predictions" view={view} onChange={onChange} />
+          <NavButton label="Bracket" target="bracket" view={view} onChange={onChange} />
         </nav>
 
         {/* Right: live indicator */}
@@ -127,10 +140,12 @@ function Header() {
 }
 
 export default function App() {
+  const [view, setView] = useState<View>('predictions');
+
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
-      <Header />
-      <Home />
+      <Header view={view} onChange={setView} />
+      {view === 'predictions' ? <Home /> : <Bracket />}
     </div>
   );
 }

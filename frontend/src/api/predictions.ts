@@ -20,3 +20,7 @@ export const getGame = (id: string): Promise<GamePrediction> =>
 
 export const getAccuracy = (): Promise<AccuracyStats> =>
   api.get<AccuracyStats>('/api/accuracy').then((r) => r.data);
+
+import type { PlayoffBracket } from '../types/bracket';
+export const getBracket = (): Promise<PlayoffBracket> =>
+  api.get<PlayoffBracket>('/api/bracket').then((r) => r.data);
