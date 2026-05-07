@@ -5,12 +5,13 @@ interface Props {
 }
 
 export function AccuracyBanner({ stats }: Props) {
-  const { total_predictions, correct_predictions, accuracy_percentage, last_updated } = stats;
+  const { total_predictions, correct_predictions, accuracy_percentage, last_updated, model_cv_accuracy, model_version } = stats;
 
   const pct = total_predictions > 0 ? accuracy_percentage : null;
   const displayPct = pct !== null ? `${pct.toFixed(1)}%` : '—';
   const barColor = pct === null ? '#4a6075' : pct >= 65 ? '#00e87a' : pct >= 50 ? '#fbbf24' : '#f87171';
   const wrong = total_predictions - correct_predictions;
+  const isML = model_version === 'xgboost-v1';
 
   const formattedDate = new Date(last_updated).toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
@@ -157,6 +158,34 @@ export function AccuracyBanner({ stats }: Props) {
         </div>
       </div>
 
+      {/* Model info row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', position: 'relative' }}>
+        <span style={{
+          background: isML ? 'rgba(0,232,122,0.08)' : 'rgba(74,96,117,0.15)',
+          border: `1px solid ${isML ? 'rgba(0,232,122,0.2)' : '#1e2d40'}`,
+          borderRadius: '6px', padding: '4px 10px',
+          fontSize: '11px', fontWeight: 700,
+          color: isML ? '#00e87a' : '#4a6075',
+          letterSpacing: '0.05em',
+        }}>
+          {isML ? 'XGBoost v1' : 'Rule-based fallback'}
+        </span>
+        {model_cv_accuracy != null && (
+          <span style={{ color: '#4a6075', fontSize: '12px' }}>
+            Cross-validated training accuracy:{' '}
+            <span style={{ color: '#8ca3be', fontWeight: 700 }}>
+              {(model_cv_accuracy * 100).toFixed(1)}%
+            </span>
+            {' '}(3 seasons, ~3 700 games)
+          </span>
+        )}
+        {!isML && (
+          <span style={{ color: '#2d4060', fontSize: '12px', fontStyle: 'italic' }}>
+            Model training in progress — predictions use heuristic until ready.
+          </span>
+        )}
+      </div>
+
       {total_predictions === 0 && (
         <p style={{
           margin: 0,
@@ -165,7 +194,7 @@ export function AccuracyBanner({ stats }: Props) {
           fontStyle: 'italic',
           position: 'relative',
         }}>
-          No predictions tracked yet. Accuracy updates as games finish.
+          No predictions tracked yet. Accuracy updates automatically as games finish.
         </p>
       )}
     </div>

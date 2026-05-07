@@ -2,17 +2,19 @@ services:
   - type: web
     name: statcast-api
     runtime: python
+    region: oregon
+    plan: free
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: SPORTS_API_KEY
-        sync: false
+      - key: PYTHON_VERSION
+        value: 3.11.0
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_KEY
         sync: false
       - key: REDIS_URL
         sync: false
-      - key: ALLOWED_ORIGINS
+      - key: FRONTEND_URL
         sync: false
