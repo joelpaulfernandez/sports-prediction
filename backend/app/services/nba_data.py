@@ -17,7 +17,7 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 
 CURRENT_SEASON = "2025-26"
-TRAINING_SEASONS = ["2022-23", "2023-24", "2024-25"]
+TRAINING_SEASONS = ["2021-22", "2022-23", "2023-24", "2024-25"]
 
 from app.services.cache import cache_get as _cache_get, cache_set as _cache_set
 

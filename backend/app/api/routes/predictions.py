@@ -105,12 +105,16 @@ async def _build_prediction(
     h_elo = float(elo_ratings.get(home_id, 1500.0))
     a_elo = float(elo_ratings.get(away_id, 1500.0))
 
+    # NBA playoff game IDs have '4' at index 2 (e.g. "0042501001")
+    is_playoff = str(game["id"])[2:3] == "4"
+
     engine = get_prediction_engine()
     result = engine.generate_prediction(
         h_stats, a_stats,
         h_recent, a_recent,
         h_elo, a_elo,
         h_rest, a_rest,
+        is_playoff=is_playoff,
     )
 
     predicted_winner = home_name if result["predicted_winner_is_home"] else away_name
@@ -140,6 +144,8 @@ async def _build_prediction(
         reasons=[PredictionReason(text=t) for t in reason_texts],
         game_date=game_date,
         status=_game_status(game.get("status_id", 1)),
+        home_pts=game.get("home_pts"),
+        away_pts=game.get("away_pts"),
         home_stats=_build_team_stats(h_stats, h_recent, h_elo, h_rest),
         away_stats=_build_team_stats(a_stats, a_recent, a_elo, a_rest),
         model_version=engine.model_version,

@@ -164,8 +164,11 @@ export function PredictionCard({ prediction }: Props) {
   const {
     home_team, away_team, predicted_winner, confidence,
     predicted_home_score, predicted_away_score, reasons,
-    game_date, status, home_stats, away_stats, model_version,
+    game_date, status, home_pts, away_pts, home_stats, away_stats, model_version,
   } = prediction;
+
+  const hasActualScore = (status === 'live' || status === 'finished') &&
+    home_pts != null && away_pts != null;
 
   const confidencePct = Math.round(confidence * 100);
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.scheduled;
@@ -238,16 +241,29 @@ export function PredictionCard({ prediction }: Props) {
             <span style={{ color: homeWins ? '#f0f6ff' : '#8ca3be', fontWeight: homeWins ? 700 : 500, fontSize: '13px', textAlign: 'center', lineHeight: 1.3 }}>
               {home_team}
             </span>
-            <span style={{ fontSize: '34px', fontWeight: 900, color: homeWins ? '#00e87a' : '#4a6075', letterSpacing: '-0.02em', lineHeight: 1 }}>
-              {predicted_home_score}
-            </span>
+            {hasActualScore ? (
+              <>
+                <span style={{ fontSize: '34px', fontWeight: 900, color: home_pts! > away_pts! ? '#00e87a' : '#4a6075', letterSpacing: '-0.02em', lineHeight: 1 }}>
+                  {home_pts}
+                </span>
+                <span style={{ fontSize: '10px', color: '#2d4060', fontWeight: 600 }}>
+                  pred. {predicted_home_score}
+                </span>
+              </>
+            ) : (
+              <span style={{ fontSize: '34px', fontWeight: 900, color: homeWins ? '#00e87a' : '#4a6075', letterSpacing: '-0.02em', lineHeight: 1 }}>
+                {predicted_home_score}
+              </span>
+            )}
             <span style={{ fontSize: '10px', color: '#2d4060', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>Home</span>
           </div>
 
-          {/* VS */}
+          {/* VS / Score divider */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
             <div style={{ width: '1px', height: '20px', background: 'linear-gradient(to bottom, transparent, #2d4060, transparent)' }} />
-            <span style={{ color: '#2d4060', fontWeight: 800, fontSize: '11px', letterSpacing: '0.1em' }}>VS</span>
+            <span style={{ color: '#2d4060', fontWeight: 800, fontSize: '11px', letterSpacing: '0.1em' }}>
+              {hasActualScore ? (status === 'live' ? 'LIVE' : 'FINAL') : 'VS'}
+            </span>
             <div style={{ width: '1px', height: '20px', background: 'linear-gradient(to bottom, transparent, #2d4060, transparent)' }} />
           </div>
 
@@ -257,9 +273,20 @@ export function PredictionCard({ prediction }: Props) {
             <span style={{ color: awayWins ? '#f0f6ff' : '#8ca3be', fontWeight: awayWins ? 700 : 500, fontSize: '13px', textAlign: 'center', lineHeight: 1.3 }}>
               {away_team}
             </span>
-            <span style={{ fontSize: '34px', fontWeight: 900, color: awayWins ? '#00e87a' : '#4a6075', letterSpacing: '-0.02em', lineHeight: 1 }}>
-              {predicted_away_score}
-            </span>
+            {hasActualScore ? (
+              <>
+                <span style={{ fontSize: '34px', fontWeight: 900, color: away_pts! > home_pts! ? '#00e87a' : '#4a6075', letterSpacing: '-0.02em', lineHeight: 1 }}>
+                  {away_pts}
+                </span>
+                <span style={{ fontSize: '10px', color: '#2d4060', fontWeight: 600 }}>
+                  pred. {predicted_away_score}
+                </span>
+              </>
+            ) : (
+              <span style={{ fontSize: '34px', fontWeight: 900, color: awayWins ? '#00e87a' : '#4a6075', letterSpacing: '-0.02em', lineHeight: 1 }}>
+                {predicted_away_score}
+              </span>
+            )}
             <span style={{ fontSize: '10px', color: '#2d4060', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>Away</span>
           </div>
         </div>

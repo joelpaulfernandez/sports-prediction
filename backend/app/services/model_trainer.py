@@ -62,7 +62,7 @@ def train_and_save(model_path: str | None = None) -> dict:
             X_parts.append(np.array(rows, dtype=np.float32))
             y_parts.extend(labels)
         print(f"[trainer]   → {len(rows)} training games")
-        time.sleep(1.0)   # be polite between seasons
+        time.sleep(1.0)
 
     if not X_parts:
         print("[trainer] No training data collected — aborting.")
@@ -135,10 +135,25 @@ def train_and_save(model_path: str | None = None) -> dict:
 
 def _build_season_examples(season: str) -> tuple[list[np.ndarray], list[int]]:
     """
-    Build (feature_vectors, labels) for every regular-season game in `season`.
-    label = 1 if home team won, 0 otherwise.
+    Build (feature_vectors, labels) for every regular-season and playoff game
+    in `season`. label = 1 if home team won, 0 otherwise.
     """
-    game_log = nba_data.get_season_game_log(season, "Regular Season")
+    rows: list[np.ndarray] = []
+    labels: list[int] = []
+
+    for season_type, is_playoff in [("Regular Season", False), ("Playoffs", True)]:
+        part_rows, part_labels = _build_examples_for_type(season, season_type, is_playoff)
+        rows.extend(part_rows)
+        labels.extend(part_labels)
+        time.sleep(0.5)
+
+    return rows, labels
+
+
+def _build_examples_for_type(
+    season: str, season_type: str, is_playoff: bool
+) -> tuple[list[np.ndarray], list[int]]:
+    game_log = nba_data.get_season_game_log(season, season_type)
     if game_log is None or game_log.empty:
         return [], []
 
@@ -166,7 +181,6 @@ def _build_season_examples(season: str) -> tuple[list[np.ndarray], list[int]]:
     rows: list[np.ndarray] = []
     labels: list[int] = []
 
-    # Pre-compute Elo for the whole season (minor leakage — acceptable)
     elo = EloSystem()
     elo.process_game_log(game_log)
 
@@ -181,7 +195,6 @@ def _build_season_examples(season: str) -> tuple[list[np.ndarray], list[int]]:
 
         game_date_str = str(row["GAME_DATE"].date())
 
-        # Recent form up to this game (no leakage)
         h_recent = nba_data.compute_team_recent_form(
             home_id, game_log, n_games=10, before_date=game_date_str
         )
@@ -200,6 +213,7 @@ def _build_season_examples(season: str) -> tuple[list[np.ndarray], list[int]]:
             h_recent, a_recent,
             h_elo, a_elo,
             h_rest, a_rest,
+            is_playoff=is_playoff,
         )
 
         label = 1 if str(row["WL_home"]) == "W" else 0

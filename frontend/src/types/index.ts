@@ -27,6 +27,8 @@ export interface GamePrediction {
   reasons: PredictionReason[];
   game_date: string;
   status: string;
+  home_pts?: number | null;
+  away_pts?: number | null;
   home_stats?: TeamStats;
   away_stats?: TeamStats;
   model_version?: string;

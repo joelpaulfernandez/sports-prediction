@@ -92,6 +92,7 @@ class PredictionEngine:
         away_elo: float,
         home_rest: int = 3,
         away_rest: int = 3,
+        is_playoff: bool = False,
     ) -> dict:
         """
         Return prediction dict:
@@ -103,6 +104,7 @@ class PredictionEngine:
             home_recent, away_recent,
             home_elo, away_elo,
             home_rest, away_rest,
+            is_playoff=is_playoff,
         )
 
         if self._model is not None:

@@ -33,6 +33,7 @@ export function Home() {
   const [accuracy, setAccuracy] = useState<AccuracyStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,6 +45,7 @@ export function Home() {
         if (!cancelled) {
           setGames(gamesData);
           setAccuracy(accuracyData);
+          setLastRefreshed(new Date());
         }
       } catch (err: unknown) {
         if (!cancelled) {
@@ -57,6 +59,19 @@ export function Home() {
     load();
     return () => { cancelled = true; };
   }, []);
+
+  // Auto-refresh every 60s when any game is live
+  useEffect(() => {
+    const hasLive = games.some(g => g.status === 'live');
+    if (!hasLive) return;
+    const id = setInterval(() => {
+      getGames().then(data => {
+        setGames(data);
+        setLastRefreshed(new Date());
+      }).catch(() => {});
+    }, 60_000);
+    return () => clearInterval(id);
+  }, [games]);
 
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
@@ -195,7 +210,17 @@ export function Home() {
           }}>
             <span style={{ color: '#4a6075', fontSize: '13px', fontWeight: 600 }}>
               {games.length} {games.length === 1 ? 'game' : 'games'} today
+              {games.some(g => g.status === 'live') && (
+                <span style={{ marginLeft: '10px', color: '#00e87a', fontWeight: 700 }}>
+                  · LIVE
+                </span>
+              )}
             </span>
+            {lastRefreshed && games.some(g => g.status === 'live') && (
+              <span style={{ color: '#2d4060', fontSize: '11px' }}>
+                Updated {lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
           </div>
           <div style={{
             display: 'grid',
