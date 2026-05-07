@@ -193,7 +193,10 @@ export function PredictionCard({ prediction }: Props) {
   const homeWins = predicted_winner === home_team;
   const awayWins = predicted_winner === away_team;
 
-  const formattedDate = new Date(game_date + 'T00:00:00').toLocaleDateString('en-US', {
+  // Use game_time_utc when available so the date reflects the user's local timezone.
+  // Falling back to game_date+'T12:00:00' avoids UTC-midnight off-by-one issues.
+  const dateSource = game_time_utc ? new Date(game_time_utc) : new Date(game_date + 'T12:00:00');
+  const formattedDate = dateSource.toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric',
   });
 
