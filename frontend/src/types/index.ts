@@ -31,6 +31,7 @@ export interface GamePrediction {
   status: string;
   home_pts?: number | null;
   away_pts?: number | null;
+  game_time_utc?: string | null;
   home_stats?: TeamStats;
   away_stats?: TeamStats;
   model_version?: string;

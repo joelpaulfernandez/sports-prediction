@@ -9,7 +9,8 @@ import asyncio
 from datetime import date, datetime, timezone
 
 import pandas as pd
-from fastapi import APIRouter, HTTPException
+from typing import Optional
+from fastapi import APIRouter, HTTPException, Query
 
 from app.schemas.prediction import GamePrediction, PredictionReason, TeamStats
 from app.services import nba_data
@@ -148,6 +149,7 @@ async def _build_prediction(
         status=_game_status(game.get("status_id", 1)),
         home_pts=game.get("home_pts"),
         away_pts=game.get("away_pts"),
+        game_time_utc=game.get("game_time_utc"),
         home_stats=_build_team_stats(h_stats, h_recent, h_elo, h_rest),
         away_stats=_build_team_stats(a_stats, a_recent, a_elo, a_rest),
         model_version=engine.model_version,
@@ -178,11 +180,11 @@ async def _fetch_shared_data() -> tuple[dict, dict, pd.DataFrame]:
 # ---------------------------------------------------------------------------
 
 @router.get("/games", response_model=list[GamePrediction])
-async def get_games():
+async def get_games(date: Optional[str] = Query(default=None, description="Client local date YYYY-MM-DD")):
     """Return ML-powered predictions for all NBA games scheduled today."""
     global _prediction_cache
 
-    today = str(date.today())
+    today = date or str(__import__("datetime").date.today())
     game_date = today
     games: list[dict] = await asyncio.to_thread(nba_data.get_todays_games, today)
 

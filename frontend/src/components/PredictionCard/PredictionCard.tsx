@@ -4,11 +4,22 @@ interface Props {
   prediction: GamePrediction;
 }
 
-const STATUS_CONFIG: Record<string, { color: string; bg: string; label: string; dot?: boolean }> = {
-  scheduled: { color: '#60a5fa', bg: 'rgba(96,165,250,0.12)', label: 'Today' },
-  live:       { color: '#00e87a', bg: 'rgba(0,232,122,0.12)',  label: 'LIVE', dot: true },
-  finished:   { color: '#4a6075', bg: 'rgba(74,96,117,0.12)',  label: 'Final' },
+const STATUS_CONFIG: Record<string, { color: string; bg: string; dot?: boolean }> = {
+  scheduled: { color: '#60a5fa', bg: 'rgba(96,165,250,0.12)' },
+  live:       { color: '#00e87a', bg: 'rgba(0,232,122,0.12)', dot: true },
+  finished:   { color: '#4a6075', bg: 'rgba(74,96,117,0.12)' },
 };
+
+function formatGameTime(game_time_utc: string | null | undefined, status: string): string {
+  if (status === 'live') return 'LIVE';
+  if (status === 'finished') return 'Final';
+  if (!game_time_utc) return 'Today';
+  try {
+    return new Date(game_time_utc).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  } catch {
+    return 'Today';
+  }
+}
 
 function TeamAvatarWithFallback({ teamId, name }: { teamId?: number | null; name: string }) {
   const initials = name.split(' ').slice(-2).map((w) => w[0]).join('').toUpperCase().slice(0, 2);
@@ -170,7 +181,7 @@ export function PredictionCard({ prediction }: Props) {
   const {
     home_team, away_team, home_team_id, away_team_id, predicted_winner, confidence,
     predicted_home_score, predicted_away_score, reasons,
-    game_date, status, home_pts, away_pts, home_stats, away_stats, model_version,
+    game_date, status, home_pts, away_pts, game_time_utc, home_stats, away_stats, model_version,
   } = prediction;
 
   const hasActualScore = (status === 'live' || status === 'finished') &&
@@ -178,6 +189,7 @@ export function PredictionCard({ prediction }: Props) {
 
   const confidencePct = Math.round(confidence * 100);
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.scheduled;
+  const timeLabel = formatGameTime(game_time_utc, status);
   const homeWins = predicted_winner === home_team;
   const awayWins = predicted_winner === away_team;
 
@@ -224,9 +236,9 @@ export function PredictionCard({ prediction }: Props) {
           </div>
           <span style={{
             background: cfg.bg, color: cfg.color,
-            fontSize: '11px', fontWeight: 700, letterSpacing: '0.06em',
-            textTransform: 'uppercase', padding: '4px 10px',
-            borderRadius: '20px', border: `1px solid ${cfg.color}33`,
+            fontSize: '11px', fontWeight: 700, letterSpacing: '0.04em',
+            textTransform: status === 'scheduled' ? 'none' : 'uppercase',
+            padding: '4px 10px', borderRadius: '20px', border: `1px solid ${cfg.color}33`,
             display: 'flex', alignItems: 'center', gap: '5px',
           }}>
             {cfg.dot && (
@@ -235,7 +247,7 @@ export function PredictionCard({ prediction }: Props) {
                 animation: 'pulse-glow 1.5s ease-in-out infinite', display: 'inline-block',
               }} />
             )}
-            {cfg.label}
+            {timeLabel}
           </span>
         </div>
 

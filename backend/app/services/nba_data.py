@@ -152,70 +152,58 @@ def _get_ongoing_series_matchups(season: str = CURRENT_SEASON) -> list[dict]:
     return games_out
 
 
-def _games_on_date(game_date: str) -> list[dict]:
+def _games_from_live_scoreboard() -> Optional[list[dict]]:
     """
-    Return completed games on a specific date from the full playoff log.
-    Falls back to empty list if none found.
+    Fetch today's NBA games from the live data API.
+    Returns scheduled, in-progress, and finished games with gameTimeUTC.
     """
     try:
-        from nba_api.stats.endpoints import leaguegamefinder
-        # NBA API expects MM/DD/YYYY format for date filters
-        dt = datetime.date.fromisoformat(game_date)
-        nba_date = dt.strftime("%m/%d/%Y")
-
-        finder = leaguegamefinder.LeagueGameFinder(
-            league_id_nullable="00",
-            date_from_nullable=nba_date,
-            date_to_nullable=nba_date,
-            season_type_nullable="Playoffs",
-        )
-        df = finder.get_data_frames()[0]
-        if df.empty:
+        from nba_api.live.nba.endpoints import scoreboard as live_scoreboard
+        sb = live_scoreboard.ScoreBoard()
+        data = sb.get_dict()
+        raw = data.get("scoreboard", {}).get("games", [])
+        if not raw:
             return []
-
-        df["GAME_DATE"] = pd.to_datetime(df["GAME_DATE"])
-        df["is_home"] = df["MATCHUP"].str.contains(r" vs\. ")
-        home_df = df[df["is_home"]].copy()
-        away_df = df[~df["is_home"]].copy()
-        if home_df.empty or away_df.empty:
-            return []
-
-        merged = home_df.merge(
-            away_df[["GAME_ID", "TEAM_ID", "TEAM_NAME", "PTS", "WL"]],
-            on="GAME_ID", suffixes=("_home", "_away"),
-        )
 
         games = []
-        for _, row in merged.iterrows():
-            h_pts = None if pd.isna(row.get("PTS_home", float("nan"))) else int(row["PTS_home"])
-            a_pts = None if pd.isna(row.get("PTS_away", float("nan"))) else int(row["PTS_away"])
-            status_id = 3 if h_pts is not None else 1
+        for g in raw:
+            home = g["homeTeam"]
+            away = g["awayTeam"]
+            status = int(g.get("gameStatus", 1))
+            home_score = home.get("score")
+            away_score = away.get("score")
+            game_time_utc = g.get("gameTimeUTC", "")
+            # Use UTC date as the canonical game date
+            game_date = game_time_utc[:10] if game_time_utc else str(datetime.date.today())
             games.append({
-                "id": str(row["GAME_ID"]),
+                "id": str(g["gameId"]),
                 "date": game_date,
-                "home_team_id": int(row["TEAM_ID_home"]),
-                "away_team_id": int(row["TEAM_ID_away"]),
-                "home_team_name": str(row["TEAM_NAME_home"]),
-                "away_team_name": str(row["TEAM_NAME_away"]),
-                "home_pts": h_pts,
-                "away_pts": a_pts,
-                "status_id": status_id,
-                "status_text": "Final" if status_id == 3 else "Scheduled",
+                "home_team_id": int(home["teamId"]),
+                "away_team_id": int(away["teamId"]),
+                "home_team_name": f"{home.get('teamCity', '')} {home.get('teamName', '')}".strip(),
+                "away_team_name": f"{away.get('teamCity', '')} {away.get('teamName', '')}".strip(),
+                "home_pts": int(home_score) if home_score and status >= 2 else None,
+                "away_pts": int(away_score) if away_score and status >= 2 else None,
+                "status_id": status,
+                "status_text": g.get("gameStatusText", ""),
+                "game_time_utc": game_time_utc,
             })
         return games
     except Exception as exc:
-        print(f"[nba_data] _games_on_date (date={game_date}) error: {exc}")
-        return []
+        print(f"[nba_data] live scoreboard error: {exc}")
+        return None
 
 
 def get_todays_games(date: Optional[str] = None) -> list[dict]:
     """
-    Return NBA games for `date` (YYYY-MM-DD, defaults to today).
+    Return NBA games for today.
 
     Strategy:
-    1. Try to get completed/live games on that specific date.
-    2. If none found (off-day or future date), fall back to ongoing series detection
-       which always shows what's happening in the current playoffs.
+    1. Live scoreboard (nba_api.live) — accurate schedule with UTC tip-off times.
+    2. Ongoing series detection — fallback for off-days / between rounds.
+
+    `date` is accepted for cache-keying but the live scoreboard always returns
+    the current NBA day regardless of what the client passes.
     """
     game_date = date or str(datetime.date.today())
     cache_key = f"games_{game_date}"
@@ -223,13 +211,13 @@ def get_todays_games(date: Optional[str] = None) -> list[dict]:
     if cached is not None:
         return cached
 
-    # First try: actual games played on this date
-    games = _games_on_date(game_date)
-    if games:
-        _cache_set(cache_key, games, ttl=120)
+    games = _games_from_live_scoreboard()
+    if games is not None:
+        ttl = 30 if any(g["status_id"] == 2 for g in games) else 120
+        _cache_set(cache_key, games, ttl=ttl)
         return games
 
-    # Second try: detect ongoing playoff series (works on off-days)
+    # Fallback: ongoing series (for off-days or API outages)
     series_games = _get_ongoing_series_matchups(CURRENT_SEASON)
     if series_games:
         _cache_set(cache_key, series_games, ttl=300)
