@@ -6,14 +6,11 @@ asyncio.to_thread() so the FastAPI event loop is never blocked.
 """
 
 import asyncio
-import json
-import os
 from datetime import date, datetime, timezone
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException
 
-from app.config import get_settings
 from app.schemas.prediction import GamePrediction, PredictionReason, TeamStats
 from app.services import nba_data
 from app.services.elo import EloSystem
@@ -61,32 +58,24 @@ def _build_team_stats(stats: dict, recent: dict, elo: float, rest: int) -> TeamS
 
 
 def _persist_prediction(prediction: GamePrediction, game_date: str) -> None:
-    """Store prediction so accuracy can be checked once the game ends."""
-    path = get_settings().predictions_log_path
+    """Store prediction in Supabase so accuracy can be checked once the game ends."""
     try:
-        log: dict = {}
-        if os.path.exists(path):
-            with open(path) as f:
-                log = json.load(f)
-
-        if game_date not in log:
-            log[game_date] = []
-
-        existing_ids = {e["game_id"] for e in log[game_date]}
-        if prediction.game_id not in existing_ids:
-            log[game_date].append({
+        from app.services.db import get_db
+        db = get_db()
+        db.table("predictions").upsert(
+            {
                 "game_id": prediction.game_id,
+                "game_date": game_date,
                 "home_team": prediction.home_team,
                 "away_team": prediction.away_team,
                 "predicted_winner": prediction.predicted_winner,
                 "confidence": prediction.confidence,
                 "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-            })
-
-        with open(path, "w") as f:
-            json.dump(log, f, indent=2)
+            },
+            on_conflict="game_id",
+        ).execute()
     except Exception as exc:
-        print(f"[predictions] Could not persist prediction log: {exc}")
+        print(f"[predictions] Could not persist prediction: {exc}")
 
 
 async def _build_prediction(

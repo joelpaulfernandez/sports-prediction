@@ -5,8 +5,8 @@ All functions are synchronous; use asyncio.to_thread() in async route handlers.
 Results are cached in-memory with TTL to respect NBA stats API rate limits.
 """
 
-import time
 import datetime
+import time
 import random
 from typing import Optional
 
@@ -19,25 +19,7 @@ import pandas as pd
 CURRENT_SEASON = "2025-26"
 TRAINING_SEASONS = ["2022-23", "2023-24", "2024-25"]
 
-# ---------------------------------------------------------------------------
-# Simple in-memory TTL cache
-# ---------------------------------------------------------------------------
-
-_CACHE: dict = {}
-_CACHE_EXPIRY: dict[str, float] = {}
-
-
-def _cache_get(key: str):
-    if key in _CACHE and time.monotonic() < _CACHE_EXPIRY[key]:
-        return _CACHE[key]
-    _CACHE.pop(key, None)
-    _CACHE_EXPIRY.pop(key, None)
-    return None
-
-
-def _cache_set(key: str, value, ttl: int) -> None:
-    _CACHE[key] = value
-    _CACHE_EXPIRY[key] = time.monotonic() + ttl
+from app.services.cache import cache_get as _cache_get, cache_set as _cache_set
 
 
 def _sleep():
@@ -137,8 +119,8 @@ def get_all_team_stats(season: str = CURRENT_SEASON) -> dict[int, dict]:
         adv_df = leaguedashteamstats.LeagueDashTeamStats(
             season=season,
             measure_type_detailed_defense="Advanced",
-            per_mode_simple="PerGame",
-            league_id="00",
+            per_mode_detailed="PerGame",
+            league_id_nullable="00",
         ).get_data_frames()[0]
         _sleep()
 
@@ -146,8 +128,8 @@ def get_all_team_stats(season: str = CURRENT_SEASON) -> dict[int, dict]:
         ff_df = leaguedashteamstats.LeagueDashTeamStats(
             season=season,
             measure_type_detailed_defense="Four Factors",
-            per_mode_simple="PerGame",
-            league_id="00",
+            per_mode_detailed="PerGame",
+            league_id_nullable="00",
         ).get_data_frames()[0]
         _sleep()
 
@@ -155,8 +137,8 @@ def get_all_team_stats(season: str = CURRENT_SEASON) -> dict[int, dict]:
         base_df = leaguedashteamstats.LeagueDashTeamStats(
             season=season,
             measure_type_detailed_defense="Base",
-            per_mode_simple="PerGame",
-            league_id="00",
+            per_mode_detailed="PerGame",
+            league_id_nullable="00",
         ).get_data_frames()[0]
 
         result: dict[int, dict] = {}

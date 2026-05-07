@@ -29,14 +29,12 @@ async def _auto_train():
 async def _resolve_yesterday():
     """Check yesterday's predictions against real results."""
     try:
-        import httpx
-        async with httpx.AsyncClient(base_url="http://localhost:8000") as client:
-            r = await client.post("/api/accuracy/update")
-            data = r.json()
-            if data.get("updated", 0) > 0:
-                print(f"[startup] Accuracy update: {data['message']}")
+        from app.api.routes.accuracy import update_accuracy
+        data = await update_accuracy()
+        if data.get("updated", 0) > 0:
+            print(f"[startup] Accuracy update: {data['message']}")
     except Exception:
-        pass   # non-critical; server may not be reachable yet on first boot
+        pass
 
 
 @asynccontextmanager
@@ -63,9 +61,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+_frontend_url = get_settings().frontend_url
+if _frontend_url and _frontend_url not in _origins:
+    _origins.append(_frontend_url)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
