@@ -1,15 +1,15 @@
 """
 Predictions API routes.
 
-All data fetching from stats.nba.com is offloaded to threads via
-asyncio.to_thread() so the FastAPI event loop is never blocked.
+All NBA data fetching is pre-warmed in the background at startup and refreshed
+on a schedule. Route handlers serve from an in-memory cache and return in < 100 ms.
 """
 
 import asyncio
 from datetime import date, datetime, timezone
+from typing import Optional
 
 import pandas as pd
-from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 
 from app.schemas.prediction import GamePrediction, PredictionReason, TeamStats
@@ -20,8 +20,21 @@ from app.services.prediction_engine import get_prediction_engine
 
 router = APIRouter(prefix="/api/predictions", tags=["predictions"])
 
-# In-process cache keyed by game_id (refreshed each call to /games)
-_prediction_cache: dict[str, GamePrediction] = {}
+# ---------------------------------------------------------------------------
+# Warmed prediction cache
+# ---------------------------------------------------------------------------
+
+# Keyed by local date string (YYYY-MM-DD).  Populated by warm_predictions().
+_cache: dict[str, list[GamePrediction]] = {}
+_cache_built_at: dict[str, datetime] = {}
+_warm_lock = asyncio.Lock()
+
+
+def _ttl_seconds(predictions: list[GamePrediction]) -> int:
+    """Short TTL during live games, longer when all games are scheduled/final."""
+    if any(p.status == "live" for p in predictions):
+        return 30
+    return 300  # 5 minutes for scheduled / finished
 
 
 # ---------------------------------------------------------------------------
@@ -94,7 +107,6 @@ async def _build_prediction(
     h_stats = team_stats.get(home_id, {})
     a_stats = team_stats.get(away_id, {})
 
-    # Recent form (computed in thread to avoid blocking)
     h_recent, a_recent = await asyncio.gather(
         asyncio.to_thread(nba_data.compute_team_recent_form, home_id, game_log, 10),
         asyncio.to_thread(nba_data.compute_team_recent_form, away_id, game_log, 10),
@@ -106,7 +118,6 @@ async def _build_prediction(
     h_elo = float(elo_ratings.get(home_id, 1500.0))
     a_elo = float(elo_ratings.get(away_id, 1500.0))
 
-    # NBA playoff game IDs have '4' at index 2 (e.g. "0042501001")
     is_playoff = str(game["id"])[2:3] == "4"
 
     engine = get_prediction_engine()
@@ -176,49 +187,86 @@ async def _fetch_shared_data() -> tuple[dict, dict, pd.DataFrame]:
 
 
 # ---------------------------------------------------------------------------
+# Warming — called at startup and on a schedule
+# ---------------------------------------------------------------------------
+
+async def warm_predictions(today: str | None = None) -> list[GamePrediction]:
+    """
+    Build predictions for `today` and store them in the in-memory cache.
+    Subsequent calls to GET /games return from this cache in < 100 ms.
+    Safe to call concurrently — only one build runs at a time per date.
+    """
+    async with _warm_lock:
+        today = today or str(date.today())
+
+        # Skip if the cached result is still fresh
+        if today in _cache:
+            age = (datetime.now(timezone.utc) - _cache_built_at[today]).total_seconds()
+            if age < _ttl_seconds(_cache[today]):
+                return _cache[today]
+
+        print(f"[warming] Building predictions for {today}…")
+        try:
+            games = await asyncio.to_thread(nba_data.get_todays_games, today)
+            team_stats, elo_ratings, game_log = await _fetch_shared_data()
+
+            predictions: list[GamePrediction] = []
+            for game in games:
+                try:
+                    pred = await _build_prediction(game, team_stats, elo_ratings, game_log)
+                    _persist_prediction(pred, today)
+                    predictions.append(pred)
+                except Exception as exc:
+                    print(f"[warming] Skipping game {game.get('id')}: {exc}")
+
+            _cache[today] = predictions
+            _cache_built_at[today] = datetime.now(timezone.utc)
+            print(f"[warming] Done — {len(predictions)} prediction(s) cached for {today}.")
+            return predictions
+
+        except Exception as exc:
+            print(f"[warming] Failed: {exc}")
+            return _cache.get(today, [])  # return stale rather than nothing
+
+
+# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
 @router.get("/games", response_model=list[GamePrediction])
 async def get_games(date: Optional[str] = Query(default=None, description="Client local date YYYY-MM-DD")):
-    """Return ML-powered predictions for all NBA games scheduled today."""
-    global _prediction_cache
-
+    """Return ML-powered predictions for today's NBA games. Served from cache."""
     today = date or str(__import__("datetime").date.today())
-    game_date = today
-    games: list[dict] = await asyncio.to_thread(nba_data.get_todays_games, today)
 
-    team_stats, elo_ratings, game_log = await _fetch_shared_data()
+    # Return cache immediately if it exists (even if stale — background will refresh)
+    if today in _cache and _cache[today]:
+        stale = (datetime.now(timezone.utc) - _cache_built_at[today]).total_seconds() > _ttl_seconds(_cache[today])
+        if stale:
+            # Refresh in background, serve stale now
+            asyncio.create_task(warm_predictions(today))
+        return _cache[today]
 
-    _prediction_cache = {}
-    predictions: list[GamePrediction] = []
-
-    for game in games:
-        try:
-            pred = await _build_prediction(game, team_stats, elo_ratings, game_log)
-            _prediction_cache[pred.game_id] = pred
-            _persist_prediction(pred, game_date)
-            predictions.append(pred)
-        except Exception as exc:
-            print(f"[predictions] Skipping game {game.get('id')}: {exc}")
-
-    return predictions
+    # Cache is empty — compute now (only happens on first request after cold start
+    # if startup warming hasn't finished yet)
+    return await warm_predictions(today)
 
 
 @router.get("/games/{game_id}", response_model=GamePrediction)
 async def get_game(game_id: str):
     """Return the prediction for a single game."""
-    if game_id in _prediction_cache:
-        return _prediction_cache[game_id]
-
     today = str(date.today())
-    games = await asyncio.to_thread(nba_data.get_todays_games, today)
 
+    # Check warmed cache first
+    for pred in _cache.get(today, []):
+        if pred.game_id == game_id:
+            return pred
+
+    # Fall back to computing just this game
+    games = await asyncio.to_thread(nba_data.get_todays_games, today)
     for game in games:
         if str(game["id"]) == game_id:
             team_stats, elo_ratings, game_log = await _fetch_shared_data()
             pred = await _build_prediction(game, team_stats, elo_ratings, game_log)
-            _prediction_cache[game_id] = pred
             return pred
 
     raise HTTPException(status_code=404, detail=f"Game {game_id} not found for today.")
