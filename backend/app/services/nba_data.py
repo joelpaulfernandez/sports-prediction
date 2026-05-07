@@ -31,11 +31,90 @@ def _sleep():
 # Today's games
 # ---------------------------------------------------------------------------
 
+def _parse_cdn_game(g: dict, game_date: str) -> dict:
+    home = g["homeTeam"]
+    away = g["awayTeam"]
+    status = int(g.get("gameStatus", 1))
+    home_score = g["homeTeam"].get("score")
+    away_score = g["awayTeam"].get("score")
+    return {
+        "id": g["gameId"],
+        "date": game_date,
+        "home_team_id": int(home["teamId"]),
+        "away_team_id": int(away["teamId"]),
+        "home_team_name": f"{home.get('teamCity', '')} {home.get('teamName', '')}".strip(),
+        "away_team_name": f"{away.get('teamCity', '')} {away.get('teamName', '')}".strip(),
+        "home_pts": int(home_score) if home_score is not None and status >= 2 else None,
+        "away_pts": int(away_score) if away_score is not None and status >= 2 else None,
+        "status_id": status,
+        "status_text": g.get("gameStatusText", ""),
+    }
+
+
+def _games_from_gamefinder(game_date: str) -> Optional[list[dict]]:
+    """
+    Use LeagueGameFinder to find games for a specific date.
+    Works for completed games and sometimes scheduled ones.
+    """
+    try:
+        from nba_api.stats.endpoints import leaguegamefinder
+        finder = leaguegamefinder.LeagueGameFinder(
+            league_id_nullable="00",
+            date_from_nullable=game_date,
+            date_to_nullable=game_date,
+            season_type_nullable="Playoffs",
+        )
+        df = finder.get_data_frames()[0]
+        if df.empty:
+            # Try regular season too
+            finder2 = leaguegamefinder.LeagueGameFinder(
+                league_id_nullable="00",
+                date_from_nullable=game_date,
+                date_to_nullable=game_date,
+                season_type_nullable="Regular Season",
+            )
+            df = finder2.get_data_frames()[0]
+        if df.empty:
+            return []
+
+        df["GAME_DATE"] = pd.to_datetime(df["GAME_DATE"])
+        df["is_home"] = df["MATCHUP"].str.contains(r" vs\. ")
+        home_df = df[df["is_home"]].copy()
+        away_df = df[~df["is_home"]].copy()
+
+        merged = home_df.merge(
+            away_df[["GAME_ID", "TEAM_ID", "TEAM_NAME", "PTS", "WL"]],
+            on="GAME_ID", suffixes=("_home", "_away"),
+        )
+
+        games = []
+        for _, row in merged.iterrows():
+            h_pts = None if pd.isna(row.get("PTS_home", float("nan"))) else int(row["PTS_home"])
+            a_pts = None if pd.isna(row.get("PTS_away", float("nan"))) else int(row["PTS_away"])
+            status_id = 3 if h_pts is not None else 1
+            games.append({
+                "id": str(row["GAME_ID"]),
+                "date": game_date,
+                "home_team_id": int(row["TEAM_ID_home"]),
+                "away_team_id": int(row["TEAM_ID_away"]),
+                "home_team_name": str(row["TEAM_NAME_home"]),
+                "away_team_name": str(row["TEAM_NAME_away"]),
+                "home_pts": h_pts,
+                "away_pts": a_pts,
+                "status_id": status_id,
+                "status_text": "Final" if status_id == 3 else "Scheduled",
+            })
+        return games
+    except Exception as exc:
+        print(f"[nba_data] leaguegamefinder (date={game_date}) error: {exc}")
+        return None
+
+
 def get_todays_games(date: Optional[str] = None) -> list[dict]:
     """
-    Return NBA games scheduled for `date` (YYYY-MM-DD, defaults to today).
-    Each element is a dict with: id, date, home/away team ids and names,
-    home/away pts (or None if not started), status_id, status_text.
+    Return NBA games for `date` (YYYY-MM-DD, defaults to today).
+    Uses LeagueGameFinder which reliably works when stats.nba.com endpoints
+    like scoreboardv2 are unavailable.
     """
     game_date = date or str(datetime.date.today())
     cache_key = f"games_{game_date}"
@@ -43,57 +122,12 @@ def get_todays_games(date: Optional[str] = None) -> list[dict]:
     if cached is not None:
         return cached
 
-    try:
-        from nba_api.stats.endpoints import scoreboardv2
-        board = scoreboardv2.ScoreboardV2(game_date=game_date, league_id="00", day_offset=0)
-        game_header = board.get_data_frames()[0]
-        line_score = board.get_data_frames()[1]
-
-        games = []
-        for _, row in game_header.iterrows():
-            game_id = str(row["GAME_ID"])
-            home_id = int(row["HOME_TEAM_ID"])
-            away_id = int(row["VISITOR_TEAM_ID"])
-            status_id = int(row.get("GAME_STATUS_ID", 1))
-            status_text = str(row.get("GAME_STATUS_TEXT", "")).strip()
-
-            home_ls = line_score[line_score["TEAM_ID"] == home_id]
-            away_ls = line_score[line_score["TEAM_ID"] == away_id]
-
-            def _team_name(ls_rows) -> str:
-                if len(ls_rows) == 0:
-                    return "Unknown"
-                city = str(ls_rows.iloc[0].get("TEAM_CITY_NAME", ""))
-                name = str(ls_rows.iloc[0].get("TEAM_NAME", ""))
-                return f"{city} {name}".strip()
-
-            def _pts(ls_rows) -> Optional[int]:
-                if len(ls_rows) == 0:
-                    return None
-                v = ls_rows.iloc[0].get("PTS")
-                if v is None or (isinstance(v, float) and pd.isna(v)):
-                    return None
-                return int(v)
-
-            games.append({
-                "id": game_id,
-                "date": game_date,
-                "home_team_id": home_id,
-                "away_team_id": away_id,
-                "home_team_name": _team_name(home_ls),
-                "away_team_name": _team_name(away_ls),
-                "home_pts": _pts(home_ls),
-                "away_pts": _pts(away_ls),
-                "status_id": status_id,
-                "status_text": status_text,
-            })
-
-        _cache_set(cache_key, games, ttl=600)
+    games = _games_from_gamefinder(game_date)
+    if games is not None:
+        _cache_set(cache_key, games, ttl=120)
         return games
 
-    except Exception as exc:
-        print(f"[nba_data] scoreboardv2 error: {exc}")
-        return _mock_games(game_date)
+    return _mock_games(game_date)
 
 
 # ---------------------------------------------------------------------------
