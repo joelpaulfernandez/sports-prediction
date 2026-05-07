@@ -1,46 +1,49 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
 :root {
-  --bg-base: #080f1a;
-  --bg-surface: #0f1923;
-  --bg-elevated: #16202e;
-  --bg-card: #111c2a;
-  --border: #1e2d40;
-  --border-bright: #2d4060;
+  --bg: #0a0a0f;
+  --surface: #111118;
+  --card: #16161f;
+  --card-hover: #1a1a26;
+  --border: #1f1f2e;
+  --border-bright: #2a2a3e;
 
-  --text-primary: #f0f6ff;
-  --text-secondary: #8ca3be;
-  --text-muted: #4a6075;
+  --primary: #3b82f6;
+  --primary-dim: rgba(59, 130, 246, 0.12);
+  --primary-glow: rgba(59, 130, 246, 0.25);
+  --accent: #f59e0b;
+  --accent-dim: rgba(245, 158, 11, 0.12);
+  --success: #10b981;
+  --success-dim: rgba(16, 185, 129, 0.12);
+  --error: #ef4444;
+  --error-dim: rgba(239, 68, 68, 0.12);
 
-  --accent-green: #00e87a;
-  --accent-green-dim: rgba(0, 232, 122, 0.15);
-  --accent-green-glow: rgba(0, 232, 122, 0.25);
-  --accent-yellow: #fbbf24;
-  --accent-red: #f87171;
-  --accent-blue: #60a5fa;
+  --text-primary: #f8fafc;
+  --text-secondary: #64748b;
+  --text-muted: #334155;
 
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Barlow Condensed', sans-serif;
+  --font-body: 'DM Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+
   font-size: 16px;
-  line-height: 1.5;
-  color: var(--text-primary);
-  background: var(--bg-base);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 
-html, body {
+*, *::before, *::after {
+  box-sizing: border-box;
   margin: 0;
   padding: 0;
-  min-height: 100vh;
-  background: var(--bg-base);
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
   color: var(--text-primary);
+  font-family: var(--font-body);
+  min-height: 100vh;
+  overflow-x: hidden;
 }
 
 #root {
@@ -49,44 +52,76 @@ html, body {
   flex-direction: column;
 }
 
-h1, h2, h3, h4, h5, h6 {
-  margin: 0;
-  color: var(--text-primary);
-  font-weight: 700;
-  line-height: 1.2;
-}
+a { color: var(--primary); text-decoration: none; }
 
-p { margin: 0; color: var(--text-secondary); }
-a { color: var(--accent-green); text-decoration: none; }
-a:hover { text-decoration: underline; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
-code {
-  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
-  font-size: 0.875em;
-  background: var(--bg-elevated);
-  color: var(--accent-green);
-  padding: 2px 6px;
-  border-radius: 4px;
-  border: 1px solid var(--border);
-}
+/* ── Animations ─────────────────────────────────────────────────── */
 
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
 
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(16px); }
+  from { opacity: 0; transform: translateY(20px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 12px rgba(0, 232, 122, 0.2); }
-  50%       { box-shadow: 0 0 24px rgba(0, 232, 122, 0.4); }
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
-html { scroll-behavior: smooth; }
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
 
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--bg-base); }
-::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #3d5470; }
+/* r=44 → circumference ≈ 276.46 */
+@keyframes ring-fill {
+  from { stroke-dashoffset: 276.46; }
+  to   { stroke-dashoffset: var(--ring-offset, 0); }
+}
+
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(24px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── Utility classes ─────────────────────────────────────────────── */
+
+.conf-ring-arc {
+  stroke-dasharray: 276.46;
+  stroke-dashoffset: var(--ring-offset, 0);
+  animation: ring-fill 1.2s cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation-delay: var(--ring-delay, 0ms);
+}
+
+.card-animate {
+  animation: card-in 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation-delay: var(--card-delay, 0ms);
+}
+
+/* ── Hero dot-grid background ────────────────────────────────────── */
+.dot-grid {
+  background-image: radial-gradient(circle, #1f1f2e 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+/* ── Scanlines texture ───────────────────────────────────────────── */
+.scanlines::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(255, 255, 255, 0.012) 3px,
+    rgba(255, 255, 255, 0.012) 4px
+  );
+  pointer-events: none;
+}
