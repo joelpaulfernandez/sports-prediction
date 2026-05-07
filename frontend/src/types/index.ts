@@ -20,6 +20,8 @@ export interface GamePrediction {
   game_id: string;
   home_team: string;
   away_team: string;
+  home_team_id?: number | null;
+  away_team_id?: number | null;
   predicted_winner: string;
   confidence: number;
   predicted_home_score: number;

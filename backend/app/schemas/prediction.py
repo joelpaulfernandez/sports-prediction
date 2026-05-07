@@ -25,6 +25,8 @@ class GamePrediction(BaseModel):
     game_id: str
     home_team: str
     away_team: str
+    home_team_id: Optional[int] = None
+    away_team_id: Optional[int] = None
     predicted_winner: str
     confidence: float = Field(..., ge=0.0, le=1.0)
     predicted_home_score: int

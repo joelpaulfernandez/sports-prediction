@@ -137,6 +137,8 @@ async def _build_prediction(
         game_id=str(game["id"]),
         home_team=home_name,
         away_team=away_name,
+        home_team_id=home_id,
+        away_team_id=away_id,
         predicted_winner=predicted_winner,
         confidence=result["confidence"],
         predicted_home_score=result["predicted_home_score"],
