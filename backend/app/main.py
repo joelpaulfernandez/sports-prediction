@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import predictions, accuracy
 from app.config import get_settings
 from app.services.prediction_engine import get_prediction_engine
+from app.services import nba_data
 
 
 async def _auto_train():
@@ -37,6 +38,25 @@ async def _resolve_yesterday():
         pass
 
 
+async def _nightly_retrain():
+    """Retrain XGBoost on historical seasons + current season completed games."""
+    print("[retrain] Nightly retrain starting…")
+    try:
+        from app.services.model_trainer import train_and_save, TRAINING_SEASONS
+        seasons = TRAINING_SEASONS + [nba_data.CURRENT_SEASON]
+        result = await asyncio.to_thread(train_and_save, None, seasons)
+        if result:
+            get_prediction_engine().reload_model()
+            print(
+                f"[retrain] Done — CV accuracy: {result['cv_accuracy']:.3f} "
+                f"over {result['n_games']} games across {len(seasons)} seasons."
+            )
+        else:
+            print("[retrain] Training returned no result — model unchanged.")
+    except Exception as exc:
+        print(f"[retrain] Failed: {exc}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     engine = get_prediction_engine()
@@ -48,8 +68,18 @@ async def lifespan(app: FastAPI):
             f"(CV accuracy: {engine.cv_accuracy:.3f})"
         )
 
-    # Resolve yesterday's predictions in the background
     asyncio.create_task(_resolve_yesterday())
+
+    # Schedule nightly retrain at 4 AM ET (08:00 UTC, accounts for EDT)
+    try:
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+        from apscheduler.triggers.cron import CronTrigger
+        scheduler = AsyncIOScheduler()
+        scheduler.add_job(_nightly_retrain, CronTrigger(hour=8, minute=0, timezone="UTC"))
+        scheduler.start()
+        print("[startup] Nightly retrain scheduled for 04:00 ET.")
+    except Exception as exc:
+        print(f"[startup] Scheduler setup failed: {exc}")
 
     yield
 

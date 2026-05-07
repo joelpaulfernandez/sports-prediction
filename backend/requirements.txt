@@ -12,4 +12,5 @@ nba_api>=1.4.1
 joblib>=1.4.0
 supabase>=2.4.6
 redis>=5.0.4
+apscheduler>=3.10.4
 pytest>=8.2.0

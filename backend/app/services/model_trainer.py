@@ -37,9 +37,14 @@ TRAINING_SEASONS = nba_data.TRAINING_SEASONS
 # Main entry point
 # ---------------------------------------------------------------------------
 
-def train_and_save(model_path: str | None = None) -> dict:
+def train_and_save(
+    model_path: str | None = None,
+    seasons: list[str] | None = None,
+) -> dict:
     """
-    Train XGBoost on historical NBA seasons and save to model_path.
+    Train XGBoost on NBA seasons and save to model_path.
+    `seasons` defaults to TRAINING_SEASONS; pass extra seasons (e.g. the
+    current one) to include in-progress data without touching the default.
     Returns a metadata dict; empty dict on failure.
     """
     try:
@@ -52,10 +57,13 @@ def train_and_save(model_path: str | None = None) -> dict:
     if model_path is None:
         model_path = get_settings().model_path
 
+    if seasons is None:
+        seasons = TRAINING_SEASONS
+
     X_parts: list[np.ndarray] = []
     y_parts: list[int] = []
 
-    for season in TRAINING_SEASONS:
+    for season in seasons:
         print(f"[trainer] Fetching {season}…")
         rows, labels = _build_season_examples(season)
         if rows:
@@ -112,7 +120,7 @@ def train_and_save(model_path: str | None = None) -> dict:
         "feature_names": FEATURE_NAMES,
         "cv_accuracy": float(cv_scores.mean()),
         "cv_std": float(cv_scores.std()),
-        "training_seasons": TRAINING_SEASONS,
+        "training_seasons": seasons,
         "n_training_games": int(len(X)),
         "home_win_rate": float(y.mean()),
         "feature_importance": importance,
