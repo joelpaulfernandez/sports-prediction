@@ -27,6 +27,7 @@ Feature index map
 17  away_rest_days        capped at 7
 18  pts_margin_diff       home avg point margin - away avg point margin
 19  home_court            always 1.0  (constant, learned weight = home advantage)
+20  is_playoff            1.0 for playoff games, 0.0 for regular season
 """
 
 import numpy as np
@@ -52,6 +53,7 @@ FEATURE_NAMES = [
     "away_rest_days",
     "pts_margin_diff",
     "home_court",
+    "is_playoff",
 ]
 
 N_FEATURES = len(FEATURE_NAMES)
@@ -74,6 +76,7 @@ def build_features(
     away_elo: float,
     home_rest: int,
     away_rest: int,
+    is_playoff: bool = False,
 ) -> np.ndarray:
     """
     Return a float32 array of shape (N_FEATURES,) for a single matchup.
@@ -137,6 +140,7 @@ def build_features(
         float(away_rest),                     # 17 away_rest_days
         h_pm - a_pm,                          # 18 pts_margin_diff
         1.0,                                  # 19 home_court
+        1.0 if is_playoff else 0.0,           # 20 is_playoff
     ], dtype=np.float32)
 
     return features

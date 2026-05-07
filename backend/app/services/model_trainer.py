@@ -37,9 +37,14 @@ TRAINING_SEASONS = nba_data.TRAINING_SEASONS
 # Main entry point
 # ---------------------------------------------------------------------------
 
-def train_and_save(model_path: str | None = None) -> dict:
+def train_and_save(
+    model_path: str | None = None,
+    seasons: list[str] | None = None,
+) -> dict:
     """
-    Train XGBoost on historical NBA seasons and save to model_path.
+    Train XGBoost on NBA seasons and save to model_path.
+    `seasons` defaults to TRAINING_SEASONS; pass extra seasons (e.g. the
+    current one) to include in-progress data without touching the default.
     Returns a metadata dict; empty dict on failure.
     """
     try:
@@ -52,17 +57,20 @@ def train_and_save(model_path: str | None = None) -> dict:
     if model_path is None:
         model_path = get_settings().model_path
 
+    if seasons is None:
+        seasons = TRAINING_SEASONS
+
     X_parts: list[np.ndarray] = []
     y_parts: list[int] = []
 
-    for season in TRAINING_SEASONS:
+    for season in seasons:
         print(f"[trainer] Fetching {season}…")
         rows, labels = _build_season_examples(season)
         if rows:
             X_parts.append(np.array(rows, dtype=np.float32))
             y_parts.extend(labels)
         print(f"[trainer]   → {len(rows)} training games")
-        time.sleep(1.0)   # be polite between seasons
+        time.sleep(1.0)
 
     if not X_parts:
         print("[trainer] No training data collected — aborting.")
@@ -112,7 +120,7 @@ def train_and_save(model_path: str | None = None) -> dict:
         "feature_names": FEATURE_NAMES,
         "cv_accuracy": float(cv_scores.mean()),
         "cv_std": float(cv_scores.std()),
-        "training_seasons": TRAINING_SEASONS,
+        "training_seasons": seasons,
         "n_training_games": int(len(X)),
         "home_win_rate": float(y.mean()),
         "feature_importance": importance,
@@ -135,10 +143,25 @@ def train_and_save(model_path: str | None = None) -> dict:
 
 def _build_season_examples(season: str) -> tuple[list[np.ndarray], list[int]]:
     """
-    Build (feature_vectors, labels) for every regular-season game in `season`.
-    label = 1 if home team won, 0 otherwise.
+    Build (feature_vectors, labels) for every regular-season and playoff game
+    in `season`. label = 1 if home team won, 0 otherwise.
     """
-    game_log = nba_data.get_season_game_log(season, "Regular Season")
+    rows: list[np.ndarray] = []
+    labels: list[int] = []
+
+    for season_type, is_playoff in [("Regular Season", False), ("Playoffs", True)]:
+        part_rows, part_labels = _build_examples_for_type(season, season_type, is_playoff)
+        rows.extend(part_rows)
+        labels.extend(part_labels)
+        time.sleep(0.5)
+
+    return rows, labels
+
+
+def _build_examples_for_type(
+    season: str, season_type: str, is_playoff: bool
+) -> tuple[list[np.ndarray], list[int]]:
+    game_log = nba_data.get_season_game_log(season, season_type)
     if game_log is None or game_log.empty:
         return [], []
 
@@ -166,7 +189,6 @@ def _build_season_examples(season: str) -> tuple[list[np.ndarray], list[int]]:
     rows: list[np.ndarray] = []
     labels: list[int] = []
 
-    # Pre-compute Elo for the whole season (minor leakage — acceptable)
     elo = EloSystem()
     elo.process_game_log(game_log)
 
@@ -181,7 +203,6 @@ def _build_season_examples(season: str) -> tuple[list[np.ndarray], list[int]]:
 
         game_date_str = str(row["GAME_DATE"].date())
 
-        # Recent form up to this game (no leakage)
         h_recent = nba_data.compute_team_recent_form(
             home_id, game_log, n_games=10, before_date=game_date_str
         )
@@ -200,6 +221,7 @@ def _build_season_examples(season: str) -> tuple[list[np.ndarray], list[int]]:
             h_recent, a_recent,
             h_elo, a_elo,
             h_rest, a_rest,
+            is_playoff=is_playoff,
         )
 
         label = 1 if str(row["WL_home"]) == "W" else 0

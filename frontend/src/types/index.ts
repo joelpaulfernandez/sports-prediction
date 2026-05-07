@@ -20,6 +20,8 @@ export interface GamePrediction {
   game_id: string;
   home_team: string;
   away_team: string;
+  home_team_id?: number | null;
+  away_team_id?: number | null;
   predicted_winner: string;
   confidence: number;
   predicted_home_score: number;
@@ -27,6 +29,9 @@ export interface GamePrediction {
   reasons: PredictionReason[];
   game_date: string;
   status: string;
+  home_pts?: number | null;
+  away_pts?: number | null;
+  game_time_utc?: string | null;
   home_stats?: TeamStats;
   away_stats?: TeamStats;
   model_version?: string;

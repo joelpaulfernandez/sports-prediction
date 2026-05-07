@@ -25,6 +25,8 @@ class GamePrediction(BaseModel):
     game_id: str
     home_team: str
     away_team: str
+    home_team_id: Optional[int] = None
+    away_team_id: Optional[int] = None
     predicted_winner: str
     confidence: float = Field(..., ge=0.0, le=1.0)
     predicted_home_score: int
@@ -32,6 +34,9 @@ class GamePrediction(BaseModel):
     reasons: list[PredictionReason]
     game_date: str
     status: Literal["scheduled", "live", "finished"]
+    home_pts: Optional[int] = None
+    away_pts: Optional[int] = None
+    game_time_utc: Optional[str] = None
     home_stats: Optional[TeamStats] = None
     away_stats: Optional[TeamStats] = None
     model_version: str = "rule-based"

@@ -10,9 +10,8 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_key: str = ""
     redis_url: str = "redis://localhost:6379"
+    frontend_url: str = ""
     model_path: str = os.path.join(_DATA_DIR, "model.pkl")
-    predictions_log_path: str = os.path.join(_DATA_DIR, "predictions_log.json")
-    accuracy_log_path: str = os.path.join(_DATA_DIR, "accuracy_log.json")
 
     model_config = {"env_file": ".env", "case_sensitive": False}
 

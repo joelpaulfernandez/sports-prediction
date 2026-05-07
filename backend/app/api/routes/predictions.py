@@ -6,14 +6,12 @@ asyncio.to_thread() so the FastAPI event loop is never blocked.
 """
 
 import asyncio
-import json
-import os
 from datetime import date, datetime, timezone
 
 import pandas as pd
-from fastapi import APIRouter, HTTPException
+from typing import Optional
+from fastapi import APIRouter, HTTPException, Query
 
-from app.config import get_settings
 from app.schemas.prediction import GamePrediction, PredictionReason, TeamStats
 from app.services import nba_data
 from app.services.elo import EloSystem
@@ -61,32 +59,24 @@ def _build_team_stats(stats: dict, recent: dict, elo: float, rest: int) -> TeamS
 
 
 def _persist_prediction(prediction: GamePrediction, game_date: str) -> None:
-    """Store prediction so accuracy can be checked once the game ends."""
-    path = get_settings().predictions_log_path
+    """Store prediction in Supabase so accuracy can be checked once the game ends."""
     try:
-        log: dict = {}
-        if os.path.exists(path):
-            with open(path) as f:
-                log = json.load(f)
-
-        if game_date not in log:
-            log[game_date] = []
-
-        existing_ids = {e["game_id"] for e in log[game_date]}
-        if prediction.game_id not in existing_ids:
-            log[game_date].append({
+        from app.services.db import get_db
+        db = get_db()
+        db.table("predictions").upsert(
+            {
                 "game_id": prediction.game_id,
+                "game_date": game_date,
                 "home_team": prediction.home_team,
                 "away_team": prediction.away_team,
                 "predicted_winner": prediction.predicted_winner,
                 "confidence": prediction.confidence,
                 "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-            })
-
-        with open(path, "w") as f:
-            json.dump(log, f, indent=2)
+            },
+            on_conflict="game_id",
+        ).execute()
     except Exception as exc:
-        print(f"[predictions] Could not persist prediction log: {exc}")
+        print(f"[predictions] Could not persist prediction: {exc}")
 
 
 async def _build_prediction(
@@ -116,12 +106,16 @@ async def _build_prediction(
     h_elo = float(elo_ratings.get(home_id, 1500.0))
     a_elo = float(elo_ratings.get(away_id, 1500.0))
 
+    # NBA playoff game IDs have '4' at index 2 (e.g. "0042501001")
+    is_playoff = str(game["id"])[2:3] == "4"
+
     engine = get_prediction_engine()
     result = engine.generate_prediction(
         h_stats, a_stats,
         h_recent, a_recent,
         h_elo, a_elo,
         h_rest, a_rest,
+        is_playoff=is_playoff,
     )
 
     predicted_winner = home_name if result["predicted_winner_is_home"] else away_name
@@ -144,6 +138,8 @@ async def _build_prediction(
         game_id=str(game["id"]),
         home_team=home_name,
         away_team=away_name,
+        home_team_id=home_id,
+        away_team_id=away_id,
         predicted_winner=predicted_winner,
         confidence=result["confidence"],
         predicted_home_score=result["predicted_home_score"],
@@ -151,6 +147,9 @@ async def _build_prediction(
         reasons=[PredictionReason(text=t) for t in reason_texts],
         game_date=game_date,
         status=_game_status(game.get("status_id", 1)),
+        home_pts=game.get("home_pts"),
+        away_pts=game.get("away_pts"),
+        game_time_utc=game.get("game_time_utc"),
         home_stats=_build_team_stats(h_stats, h_recent, h_elo, h_rest),
         away_stats=_build_team_stats(a_stats, a_recent, a_elo, a_rest),
         model_version=engine.model_version,
@@ -181,19 +180,15 @@ async def _fetch_shared_data() -> tuple[dict, dict, pd.DataFrame]:
 # ---------------------------------------------------------------------------
 
 @router.get("/games", response_model=list[GamePrediction])
-async def get_games():
+async def get_games(date: Optional[str] = Query(default=None, description="Client local date YYYY-MM-DD")):
     """Return ML-powered predictions for all NBA games scheduled today."""
     global _prediction_cache
 
-    today = str(date.today())
+    today = date or str(__import__("datetime").date.today())
+    game_date = today
+    games: list[dict] = await asyncio.to_thread(nba_data.get_todays_games, today)
 
-    # Fetch today's schedule + shared data concurrently
-    games_coro = asyncio.to_thread(nba_data.get_todays_games, today)
-    shared_coro = _fetch_shared_data()
-
-    games, (team_stats, elo_ratings, game_log) = await asyncio.gather(
-        games_coro, shared_coro
-    )
+    team_stats, elo_ratings, game_log = await _fetch_shared_data()
 
     _prediction_cache = {}
     predictions: list[GamePrediction] = []
@@ -202,7 +197,7 @@ async def get_games():
         try:
             pred = await _build_prediction(game, team_stats, elo_ratings, game_log)
             _prediction_cache[pred.game_id] = pred
-            _persist_prediction(pred, today)
+            _persist_prediction(pred, game_date)
             predictions.append(pred)
         except Exception as exc:
             print(f"[predictions] Skipping game {game.get('id')}: {exc}")
