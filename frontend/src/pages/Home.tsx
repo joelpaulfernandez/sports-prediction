@@ -12,18 +12,88 @@ function Spinner() {
       alignItems: 'center',
       justifyContent: 'center',
       gap: '16px',
-      padding: '100px 0',
+      padding: '120px 0',
     }}>
       <div style={{
-        width: '44px',
-        height: '44px',
-        border: '3px solid #1e2d40',
-        borderTop: '3px solid #00e87a',
+        width: '40px',
+        height: '40px',
+        border: '2px solid var(--border)',
+        borderTop: '2px solid var(--primary)',
         borderRadius: '50%',
-        animation: 'spin 0.7s linear infinite',
-        boxShadow: '0 0 16px rgba(0,232,122,0.2)',
+        animation: 'spin 0.8s linear infinite',
       }} />
-      <span style={{ color: '#4a6075', fontSize: '14px' }}>Loading predictions…</span>
+      <span style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: '11px',
+        color: 'var(--text-muted)',
+        letterSpacing: '0.1em',
+      }}>
+        LOADING PREDICTIONS
+      </span>
+    </div>
+  );
+}
+
+function HeroAccuracyStat({ accuracy }: { accuracy: AccuracyStats | null }) {
+  if (!accuracy || accuracy.total_predictions === 0) {
+    return (
+      <div style={{ textAlign: 'right' }}>
+        <div style={{
+          fontFamily: 'var(--font-display)',
+          fontSize: '72px',
+          fontWeight: 900,
+          letterSpacing: '-0.02em',
+          color: 'var(--border-bright)',
+          lineHeight: 1,
+        }}>—</div>
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: '10px',
+          color: 'var(--text-muted)',
+          letterSpacing: '0.1em',
+          marginTop: '8px',
+        }}>NO DATA YET</div>
+      </div>
+    );
+  }
+
+  const pct = accuracy.accuracy_percentage;
+  const color = pct >= 65 ? 'var(--success)' : pct >= 50 ? 'var(--accent)' : 'var(--error)';
+
+  return (
+    <div style={{ textAlign: 'right', animation: 'fadeIn 0.6s ease both', animationDelay: '0.2s' }}>
+      <div style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: '10px',
+        color: 'var(--text-muted)',
+        letterSpacing: '0.12em',
+        marginBottom: '8px',
+      }}>
+        SEASON ACCURACY
+      </div>
+      <div style={{
+        fontFamily: 'var(--font-display)',
+        fontSize: '80px',
+        fontWeight: 900,
+        letterSpacing: '-0.02em',
+        color,
+        lineHeight: 1,
+        textShadow: `0 0 40px ${color}44`,
+      }}>
+        {pct.toFixed(1)}%
+      </div>
+      <div style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: '11px',
+        color: 'var(--text-secondary)',
+        marginTop: '10px',
+        letterSpacing: '0.02em',
+      }}>
+        <span style={{ color: 'var(--success)', fontWeight: 600 }}>{accuracy.correct_predictions}</span>
+        {' '}correct of{' '}
+        <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{accuracy.total_predictions}</span>
+        {' '}predicted
+      </div>
     </div>
   );
 }
@@ -49,7 +119,7 @@ export function Home() {
         }
       } catch (err: unknown) {
         if (!cancelled) {
-          const message = err instanceof Error ? err.message : 'Failed to load predictions. Is the backend running?';
+          const message = err instanceof Error ? err.message : 'Failed to load predictions.';
           setError(message);
         }
       } finally {
@@ -77,107 +147,185 @@ export function Home() {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
   });
 
+  const hasLive = games.some(g => g.status === 'live');
+
   return (
-    <main style={{
-      maxWidth: '1180px',
-      margin: '0 auto',
-      padding: '0 24px 80px',
-      display: 'flex',
-      flexDirection: 'column',
-    }}>
-      {/* Hero section */}
-      <div style={{
-        padding: '52px 0 40px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12px',
-        position: 'relative',
-      }}>
-        {/* Background radial glow */}
-        <div style={{
+    <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 24px 96px', flex: 1 }}>
+
+      {/* ── Hero ─────────────────────────────────────────────── */}
+      <div style={{ position: 'relative', overflow: 'hidden' }}>
+        {/* Dot grid */}
+        <div className="dot-grid" style={{
           position: 'absolute',
-          top: '0',
-          left: '-100px',
-          width: '500px',
-          height: '300px',
-          background: 'radial-gradient(ellipse, rgba(0,232,122,0.06) 0%, transparent 70%)',
-          pointerEvents: 'none',
+          inset: 0,
+          opacity: 0.6,
+          maskImage: 'linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%)',
+          WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%)',
         }} />
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative' }}>
-          <div style={{
-            background: 'rgba(0,232,122,0.1)',
-            border: '1px solid rgba(0,232,122,0.2)',
-            borderRadius: '6px',
-            padding: '4px 10px',
-            fontSize: '11px',
-            fontWeight: 700,
-            color: '#00e87a',
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-          }}>
-            <span style={{
-              width: '6px', height: '6px',
-              background: '#00e87a',
-              borderRadius: '50%',
-              boxShadow: '0 0 6px #00e87a',
-              display: 'inline-block',
-            }} />
-            NBA · 2025–26 Season
+        {/* Vertical rule */}
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          bottom: 0,
+          left: '50%',
+          width: '1px',
+          background: 'linear-gradient(to bottom, transparent, var(--border) 30%, var(--border) 70%, transparent)',
+          display: 'none',
+        }} />
+
+        <div style={{
+          position: 'relative',
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '48px',
+          padding: '56px 0 52px',
+          alignItems: 'center',
+        }}>
+          {/* Left: title */}
+          <div style={{ animation: 'fadeUp 0.5s ease both' }}>
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: 'var(--primary-dim)',
+              border: '1px solid rgba(59,130,246,0.2)',
+              borderRadius: '4px',
+              padding: '4px 10px',
+              marginBottom: '20px',
+            }}>
+              <span style={{
+                width: '5px', height: '5px', borderRadius: '50%',
+                background: 'var(--primary)', boxShadow: '0 0 6px var(--primary)',
+                display: 'inline-block',
+              }} />
+              <span style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '10px',
+                fontWeight: 600,
+                color: 'var(--primary)',
+                letterSpacing: '0.1em',
+              }}>
+                NBA · 2025–26 SEASON
+              </span>
+            </div>
+
+            <h1 style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 'clamp(40px, 5vw, 64px)',
+              fontWeight: 900,
+              color: 'var(--text-primary)',
+              lineHeight: 1.0,
+              letterSpacing: '0.02em',
+              textTransform: 'uppercase',
+              marginBottom: '16px',
+            }}>
+              {games.length > 0 && games[0].game_date !== new Date().toISOString().slice(0, 10)
+                ? <>Upcoming<br />Predictions</>
+                : <>Today's<br />Predictions</>}
+            </h1>
+
+            <p style={{
+              fontFamily: 'var(--font-body)',
+              fontSize: '14px',
+              color: 'var(--text-muted)',
+              marginBottom: '24px',
+              letterSpacing: '0.01em',
+            }}>
+              {today}
+            </p>
+
+            {!loading && !error && games.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <span style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '12px',
+                  color: 'var(--text-secondary)',
+                  letterSpacing: '0.05em',
+                }}>
+                  {games.length} {games.length === 1 ? 'GAME' : 'GAMES'} TODAY
+                </span>
+                {hasLive && (
+                  <>
+                    <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: 'var(--border-bright)', display: 'inline-block' }} />
+                    <span style={{
+                      display: 'flex', alignItems: 'center', gap: '5px',
+                      fontFamily: 'var(--font-mono)', fontSize: '12px',
+                      color: 'var(--success)', letterSpacing: '0.08em', fontWeight: 600,
+                    }}>
+                      <span style={{
+                        width: '5px', height: '5px', borderRadius: '50%',
+                        background: 'var(--success)', animation: 'pulse-dot 1.5s ease-in-out infinite',
+                        display: 'inline-block',
+                      }} />
+                      LIVE NOW
+                    </span>
+                    {lastRefreshed && (
+                      <>
+                        <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: 'var(--border-bright)', display: 'inline-block' }} />
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)' }}>
+                          {lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Right: accuracy stat */}
+          <div style={{ animation: 'fadeUp 0.5s ease both', animationDelay: '0.1s' }}>
+            {!loading && <HeroAccuracyStat accuracy={accuracy} />}
           </div>
         </div>
 
-        <h1 style={{
-          margin: 0,
-          fontSize: 'clamp(28px, 4vw, 42px)',
-          fontWeight: 900,
-          color: '#f0f6ff',
-          lineHeight: 1.1,
-          letterSpacing: '-0.03em',
-          position: 'relative',
-        }}>
-          {games.length > 0 && games[0].game_date !== new Date().toISOString().slice(0, 10)
-            ? 'Upcoming Game Predictions'
-            : "Today's Game Predictions"}
-        </h1>
-        <p style={{
-          margin: 0,
-          color: '#4a6075',
-          fontSize: '15px',
-          position: 'relative',
-        }}>
-          {today} · AI-powered, fully transparent
-        </p>
+        {/* Bottom rule */}
+        <div style={{ height: '1px', background: 'linear-gradient(to right, transparent, var(--border) 20%, var(--border) 80%, transparent)' }} />
       </div>
 
-      {/* Accuracy banner */}
-      {accuracy && (
-        <div style={{ marginBottom: '40px' }}>
+      {/* ── Accuracy Banner ───────────────────────────────────── */}
+      {!loading && !error && accuracy && (
+        <div id="accuracy" style={{ paddingTop: '40px' }}>
           <AccuracyBanner stats={accuracy} />
         </div>
       )}
 
-      {/* Content */}
+      {/* ── Content ───────────────────────────────────────────── */}
       {loading && <Spinner />}
 
       {!loading && error && (
         <div style={{
-          background: 'rgba(248,113,113,0.06)',
-          border: '1px solid rgba(248,113,113,0.2)',
-          borderRadius: '12px',
+          margin: '40px 0',
+          background: 'var(--error-dim)',
+          border: '1px solid rgba(239,68,68,0.2)',
+          borderRadius: '8px',
           padding: '20px 24px',
-          color: '#fca5a5',
-          fontSize: '14px',
-          lineHeight: 1.6,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '6px',
         }}>
-          <strong>Error:</strong> {error}
-          <br />
-          <span style={{ color: '#4a6075', fontSize: '13px' }}>
-            Make sure the backend is running at{' '}
-            <code>http://localhost:8000</code>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '11px',
+            color: 'var(--error)',
+            letterSpacing: '0.08em',
+            fontWeight: 600,
+          }}>NETWORK ERROR</span>
+          <span style={{ fontFamily: 'var(--font-body)', fontSize: '14px', color: 'var(--text-secondary)' }}>
+            {error}
+          </span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+            Check that the backend is running at{' '}
+            <code style={{
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid var(--border)',
+              borderRadius: '3px',
+              padding: '1px 5px',
+              color: 'var(--primary)',
+            }}>
+              {import.meta.env.VITE_API_URL || 'http://localhost:8000'}
+            </code>
           </span>
         </div>
       )}
@@ -185,57 +333,40 @@ export function Home() {
       {!loading && !error && games.length === 0 && (
         <div style={{
           textAlign: 'center',
-          padding: '100px 0',
-          color: '#2d4060',
+          padding: '120px 0',
           display: 'flex',
           flexDirection: 'column',
-          gap: '14px',
           alignItems: 'center',
+          gap: '12px',
         }}>
-          <span style={{ fontSize: '52px', filter: 'grayscale(0.3)' }}>🏀</span>
-          <p style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#4a6075' }}>
-            No games scheduled today
-          </p>
-          <p style={{ margin: 0, fontSize: '14px', color: '#2d4060' }}>
-            Check back tomorrow for new predictions.
+          <div style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: '64px',
+            fontWeight: 900,
+            color: 'var(--border)',
+            letterSpacing: '0.04em',
+          }}>OFF DAY</div>
+          <p style={{ fontFamily: 'var(--font-body)', fontSize: '14px', color: 'var(--text-muted)' }}>
+            No games scheduled today. Check back tomorrow.
           </p>
         </div>
       )}
 
       {!loading && !error && games.length > 0 && (
-        <>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: '20px',
-          }}>
-            <span style={{ color: '#4a6075', fontSize: '13px', fontWeight: 600 }}>
-              {games.length} {games.length === 1 ? 'game' : 'games'} today
-              {games.some(g => g.status === 'live') && (
-                <span style={{ marginLeft: '10px', color: '#00e87a', fontWeight: 700 }}>
-                  · LIVE
-                </span>
-              )}
-            </span>
-            {lastRefreshed && games.some(g => g.status === 'live') && (
-              <span style={{ color: '#2d4060', fontSize: '11px' }}>
-                Updated {lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </span>
-            )}
-          </div>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
-            gap: '20px',
-          }}>
-            {games.map((game, i) => (
-              <div key={game.game_id} style={{ animationDelay: `${i * 80}ms` }}>
-                <PredictionCard prediction={game} />
-              </div>
-            ))}
-          </div>
-        </>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))',
+          gap: '20px',
+          paddingTop: '40px',
+        }}>
+          {games.map((game, i) => (
+            <PredictionCard
+              key={game.game_id}
+              prediction={game}
+              index={i}
+            />
+          ))}
+        </div>
       )}
     </main>
   );
