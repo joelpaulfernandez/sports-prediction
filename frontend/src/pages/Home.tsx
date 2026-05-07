@@ -139,7 +139,9 @@ export function Home() {
           letterSpacing: '-0.03em',
           position: 'relative',
         }}>
-          Today's Game Predictions
+          {games.length > 0 && games[0].game_date !== new Date().toISOString().slice(0, 10)
+            ? 'Upcoming Game Predictions'
+            : "Today's Game Predictions"}
         </h1>
         <p style={{
           margin: 0,
