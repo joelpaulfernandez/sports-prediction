@@ -31,49 +31,145 @@ def _sleep():
 # Today's games
 # ---------------------------------------------------------------------------
 
-def _parse_cdn_game(g: dict, game_date: str) -> dict:
-    home = g["homeTeam"]
-    away = g["awayTeam"]
-    status = int(g.get("gameStatus", 1))
-    home_score = g["homeTeam"].get("score")
-    away_score = g["awayTeam"].get("score")
-    return {
-        "id": g["gameId"],
-        "date": game_date,
-        "home_team_id": int(home["teamId"]),
-        "away_team_id": int(away["teamId"]),
-        "home_team_name": f"{home.get('teamCity', '')} {home.get('teamName', '')}".strip(),
-        "away_team_name": f"{away.get('teamCity', '')} {away.get('teamName', '')}".strip(),
-        "home_pts": int(home_score) if home_score is not None and status >= 2 else None,
-        "away_pts": int(away_score) if away_score is not None and status >= 2 else None,
-        "status_id": status,
-        "status_text": g.get("gameStatusText", ""),
-    }
-
-
-def _games_from_gamefinder(game_date: str) -> Optional[list[dict]]:
+def _fetch_all_playoff_games(season: str = CURRENT_SEASON) -> Optional[pd.DataFrame]:
     """
-    Use LeagueGameFinder to find games for a specific date.
-    Works for completed games and sometimes scheduled ones.
+    Fetch all playoff games for a season via LeagueGameFinder (no date filter).
+    Returns a merged home/away DataFrame with one row per game, or None on error.
     """
     try:
         from nba_api.stats.endpoints import leaguegamefinder
         finder = leaguegamefinder.LeagueGameFinder(
             league_id_nullable="00",
-            date_from_nullable=game_date,
-            date_to_nullable=game_date,
+            season_nullable=season,
             season_type_nullable="Playoffs",
         )
         df = finder.get_data_frames()[0]
         if df.empty:
-            # Try regular season too
-            finder2 = leaguegamefinder.LeagueGameFinder(
-                league_id_nullable="00",
-                date_from_nullable=game_date,
-                date_to_nullable=game_date,
-                season_type_nullable="Regular Season",
-            )
-            df = finder2.get_data_frames()[0]
+            return pd.DataFrame()
+
+        df["GAME_DATE"] = pd.to_datetime(df["GAME_DATE"])
+        df["is_home"] = df["MATCHUP"].str.contains(r" vs\. ")
+        home_df = df[df["is_home"]].copy()
+        away_df = df[~df["is_home"]].copy()
+
+        merged = home_df.merge(
+            away_df[["GAME_ID", "TEAM_ID", "TEAM_NAME", "WL"]],
+            on="GAME_ID", suffixes=("_home", "_away"),
+        )
+        return merged
+    except Exception as exc:
+        print(f"[nba_data] _fetch_all_playoff_games error: {exc}")
+        return None
+
+
+def _get_ongoing_series_matchups(season: str = CURRENT_SEASON) -> list[dict]:
+    """
+    Detect ongoing playoff series and return one game entry per active series.
+    A series is ongoing when neither team has 4 wins yet.
+    Home/away alternation follows NBA format (2-2-1-1-1).
+    """
+    cache_key = f"ongoing_series_{season}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    df = _fetch_all_playoff_games(season)
+    if df is None or (isinstance(df, pd.DataFrame) and df.empty):
+        return []
+
+    today_str = str(datetime.date.today())
+
+    games_out = []
+    df["series_key"] = df.apply(
+        lambda r: tuple(sorted([int(r["TEAM_ID_home"]), int(r["TEAM_ID_away"])])),
+        axis=1,
+    )
+
+    for series_key, series_df in df.groupby("series_key"):
+        series_df = series_df.sort_values("GAME_DATE")
+
+        # Higher seed = team that hosted game 1 (game 1 home team)
+        first_game = series_df.iloc[0]
+        higher_seed_team_id = int(first_game["TEAM_ID_home"])
+        lower_seed_team_id = int(first_game["TEAM_ID_away"])
+        higher_seed_name = str(first_game["TEAM_NAME_home"])
+        lower_seed_name = str(first_game["TEAM_NAME_away"])
+
+        # Count wins per team regardless of home/away assignment in each game
+        higher_wins = 0
+        lower_wins = 0
+        for _, g in series_df.iterrows():
+            if int(g["TEAM_ID_home"]) == higher_seed_team_id:
+                if g["WL_home"] == "W":
+                    higher_wins += 1
+                else:
+                    lower_wins += 1
+            else:
+                if g["WL_away"] == "W":
+                    higher_wins += 1
+                else:
+                    lower_wins += 1
+
+        # Series is over once either team has 4 wins
+        if higher_wins >= 4 or lower_wins >= 4:
+            continue
+
+        games_played = len(series_df)
+
+        # NBA 2-2-1-1-1 home/away pattern (higher seed hosts games 1,2,5)
+        home_games_pattern = [True, True, False, False, True, False, True]
+        next_game_num = games_played  # 0-indexed
+        higher_seed_is_home = home_games_pattern[next_game_num] if next_game_num < len(home_games_pattern) else True
+
+        if higher_seed_is_home:
+            next_home_id = higher_seed_team_id
+            next_away_id = lower_seed_team_id
+            next_home_name = higher_seed_name
+            next_away_name = lower_seed_name
+        else:
+            next_home_id = lower_seed_team_id
+            next_away_id = higher_seed_team_id
+            next_home_name = lower_seed_name
+            next_away_name = higher_seed_name
+
+        synthetic_id = f"04250{series_key[0]:010d}{series_key[1]:010d}"[:16]
+        series_label = f"({higher_wins}-{lower_wins})"
+
+        games_out.append({
+            "id": synthetic_id,
+            "date": today_str,
+            "home_team_id": next_home_id,
+            "away_team_id": next_away_id,
+            "home_team_name": next_home_name,
+            "away_team_name": next_away_name,
+            "home_pts": None,
+            "away_pts": None,
+            "status_id": 1,
+            "status_text": f"Playoffs {series_label}",
+        })
+
+    _cache_set(cache_key, games_out, ttl=300)
+    return games_out
+
+
+def _games_on_date(game_date: str) -> list[dict]:
+    """
+    Return completed games on a specific date from the full playoff log.
+    Falls back to empty list if none found.
+    """
+    try:
+        from nba_api.stats.endpoints import leaguegamefinder
+        # NBA API expects MM/DD/YYYY format for date filters
+        dt = datetime.date.fromisoformat(game_date)
+        nba_date = dt.strftime("%m/%d/%Y")
+
+        finder = leaguegamefinder.LeagueGameFinder(
+            league_id_nullable="00",
+            date_from_nullable=nba_date,
+            date_to_nullable=nba_date,
+            season_type_nullable="Playoffs",
+        )
+        df = finder.get_data_frames()[0]
         if df.empty:
             return []
 
@@ -81,6 +177,8 @@ def _games_from_gamefinder(game_date: str) -> Optional[list[dict]]:
         df["is_home"] = df["MATCHUP"].str.contains(r" vs\. ")
         home_df = df[df["is_home"]].copy()
         away_df = df[~df["is_home"]].copy()
+        if home_df.empty or away_df.empty:
+            return []
 
         merged = home_df.merge(
             away_df[["GAME_ID", "TEAM_ID", "TEAM_NAME", "PTS", "WL"]],
@@ -106,15 +204,18 @@ def _games_from_gamefinder(game_date: str) -> Optional[list[dict]]:
             })
         return games
     except Exception as exc:
-        print(f"[nba_data] leaguegamefinder (date={game_date}) error: {exc}")
-        return None
+        print(f"[nba_data] _games_on_date (date={game_date}) error: {exc}")
+        return []
 
 
 def get_todays_games(date: Optional[str] = None) -> list[dict]:
     """
     Return NBA games for `date` (YYYY-MM-DD, defaults to today).
-    Uses LeagueGameFinder which reliably works when stats.nba.com endpoints
-    like scoreboardv2 are unavailable.
+
+    Strategy:
+    1. Try to get completed/live games on that specific date.
+    2. If none found (off-day or future date), fall back to ongoing series detection
+       which always shows what's happening in the current playoffs.
     """
     game_date = date or str(datetime.date.today())
     cache_key = f"games_{game_date}"
@@ -122,10 +223,17 @@ def get_todays_games(date: Optional[str] = None) -> list[dict]:
     if cached is not None:
         return cached
 
-    games = _games_from_gamefinder(game_date)
-    if games is not None:
+    # First try: actual games played on this date
+    games = _games_on_date(game_date)
+    if games:
         _cache_set(cache_key, games, ttl=120)
         return games
+
+    # Second try: detect ongoing playoff series (works on off-days)
+    series_games = _get_ongoing_series_matchups(CURRENT_SEASON)
+    if series_games:
+        _cache_set(cache_key, series_games, ttl=300)
+        return series_games
 
     return _mock_games(game_date)
 

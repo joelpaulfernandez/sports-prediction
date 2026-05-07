@@ -6,7 +6,7 @@ asyncio.to_thread() so the FastAPI event loop is never blocked.
 """
 
 import asyncio
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException
@@ -181,17 +181,8 @@ async def get_games():
     global _prediction_cache
 
     today = str(date.today())
-
-    # If no games today, look ahead up to 3 days (handles playoff off-days)
     game_date = today
-    games: list[dict] = []
-    for offset in range(4):
-        candidate = str(date.today() + timedelta(days=offset))
-        fetched = await asyncio.to_thread(nba_data.get_todays_games, candidate)
-        if fetched:
-            games = fetched
-            game_date = candidate
-            break
+    games: list[dict] = await asyncio.to_thread(nba_data.get_todays_games, today)
 
     team_stats, elo_ratings, game_log = await _fetch_shared_data()
 
