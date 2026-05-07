@@ -53,7 +53,7 @@ def _fetch_all_playoff_games(season: str = CURRENT_SEASON) -> Optional[pd.DataFr
         away_df = df[~df["is_home"]].copy()
 
         merged = home_df.merge(
-            away_df[["GAME_ID", "TEAM_ID", "TEAM_NAME", "WL"]],
+            away_df[["GAME_ID", "TEAM_ID", "TEAM_NAME", "WL", "PTS"]],
             on="GAME_ID", suffixes=("_home", "_away"),
         )
         return merged

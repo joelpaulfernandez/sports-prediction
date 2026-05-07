@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import predictions, accuracy
+from app.api.routes import predictions, accuracy, bracket
 from app.config import get_settings
 from app.services.prediction_engine import get_prediction_engine
 from app.services import nba_data
@@ -122,6 +122,7 @@ app.add_middleware(
 
 app.include_router(predictions.router)
 app.include_router(accuracy.router)
+app.include_router(bracket.router)
 
 
 @app.get("/", tags=["health"])

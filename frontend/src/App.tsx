@@ -1,6 +1,33 @@
+import { useState } from 'react';
 import { Home } from './pages/Home';
+import { Bracket } from './pages/Bracket';
 
-function Header() {
+type View = 'predictions' | 'bracket';
+
+function Header({ view, onChange }: { view: View; onChange: (v: View) => void }) {
+  const navLink = (label: string, target: View) => {
+    const active = view === target;
+    return (
+      <button
+        onClick={() => onChange(target)}
+        style={{
+          color: active ? '#f0f6ff' : '#8ca3be',
+          fontSize: '14px',
+          fontWeight: active ? 700 : 500,
+          padding: '7px 14px',
+          borderRadius: '8px',
+          background: active ? 'rgba(0,232,122,0.08)' : 'transparent',
+          border: active ? '1px solid rgba(0,232,122,0.2)' : '1px solid transparent',
+          cursor: 'pointer',
+          transition: 'all 0.15s',
+          fontFamily: 'inherit',
+        }}
+      >
+        {label}
+      </button>
+    );
+  };
+
   return (
     <header style={{
       background: 'rgba(8, 15, 26, 0.85)',
@@ -19,7 +46,6 @@ function Header() {
         alignItems: 'center',
         justifyContent: 'space-between',
       }}>
-        {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{
             width: '34px',
@@ -53,35 +79,12 @@ function Header() {
           </span>
         </div>
 
-        {/* Nav */}
         <nav style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-          <a href="/" style={{
-            color: '#8ca3be',
-            fontSize: '14px',
-            fontWeight: 500,
-            padding: '7px 14px',
-            borderRadius: '8px',
-            transition: 'color 0.15s',
-          }}>
-            Predictions
-          </a>
-          <a href="#accuracy" style={{
-            color: '#8ca3be',
-            fontSize: '14px',
-            fontWeight: 500,
-            padding: '7px 14px',
-            borderRadius: '8px',
-          }}>
-            Accuracy
-          </a>
-          <div style={{
-            width: '1px',
-            height: '20px',
-            background: '#1e2d40',
-            margin: '0 8px',
-          }} />
+          {navLink('Predictions', 'predictions')}
+          {navLink('Bracket', 'bracket')}
+          <div style={{ width: '1px', height: '20px', background: '#1e2d40', margin: '0 8px' }} />
           <a
-            href="https://api-sports.io"
+            href="https://www.nba.com/stats"
             target="_blank"
             rel="noopener noreferrer"
             style={{
@@ -95,6 +98,7 @@ function Header() {
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
+              textDecoration: 'none',
             }}
           >
             <span style={{ color: '#00e87a' }}>●</span> Live Data
@@ -106,10 +110,12 @@ function Header() {
 }
 
 function App() {
+  const [view, setView] = useState<View>('predictions');
+
   return (
     <div style={{ minHeight: '100vh', background: '#080f1a' }}>
-      <Header />
-      <Home />
+      <Header view={view} onChange={setView} />
+      {view === 'predictions' ? <Home /> : <Bracket />}
     </div>
   );
 }
