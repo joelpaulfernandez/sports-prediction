@@ -39,13 +39,20 @@ async def _resolve_yesterday():
 
 
 async def _refresh_predictions():
-    """Rebuild the prediction cache for today. Called at startup and every 5 min."""
+    """
+    Rebuild the prediction cache for today and resolve any newly finished games
+    against accuracy_log. Called at startup and every 5 min.
+    """
     try:
         from app.api.routes.predictions import warm_predictions
+        from app.api.routes.accuracy import update_accuracy
         import datetime as dt
         await warm_predictions(str(dt.date.today()))
+        result = await update_accuracy()
+        if result.get("updated", 0) > 0:
+            print(f"[warming] Resolved {result['updated']} prediction(s) into accuracy_log.")
     except Exception as exc:
-        print(f"[warming] Prediction refresh failed: {exc}")
+        print(f"[warming] Refresh failed: {exc}")
 
 
 async def _nightly_retrain():

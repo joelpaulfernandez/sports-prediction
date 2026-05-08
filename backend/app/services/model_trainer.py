@@ -25,7 +25,7 @@ import datetime
 import numpy as np
 import pandas as pd
 
-from app.services import nba_data
+from app.services import nba_data, player_availability
 from app.services.elo import EloSystem
 from app.services.feature_engineering import build_features, FEATURE_NAMES
 from app.config import get_settings
@@ -192,6 +192,11 @@ def _build_examples_for_type(
     elo = EloSystem()
     elo.process_game_log(game_log)
 
+    # Build the per-season availability index ONCE and reuse it across every
+    # game in this season — this is the difference between training in 5 minutes
+    # vs an hour.
+    avail_index = player_availability.get_season_availability(season)
+
     for _, row in merged.iterrows():
         home_id = int(row["TEAM_ID_home"])
         away_id = int(row["TEAM_ID_away"])
@@ -216,12 +221,31 @@ def _build_examples_for_type(
         h_elo = elo.get(home_id)
         a_elo = elo.get(away_id)
 
+        # Player availability — computed from games BEFORE this one (no leakage)
+        h_avail = avail_index.get_features(home_id, before_date=game_date_str)
+        a_avail = avail_index.get_features(away_id, before_date=game_date_str)
+
+        # Home/road splits — computed from games BEFORE this one (no leakage)
+        h_splits = nba_data.compute_home_road_splits(home_id, game_log, before_date=game_date_str)
+        a_splits = nba_data.compute_home_road_splits(away_id, game_log, before_date=game_date_str)
+
+        # H2H + playoff series state — also leakage-safe (before_date is exclusive)
+        h2h = nba_data.compute_h2h_features(
+            home_id, away_id, game_log,
+            before_date=game_date_str, is_playoff=is_playoff,
+        )
+
         features = build_features(
             h, a,
             h_recent, a_recent,
             h_elo, a_elo,
             h_rest, a_rest,
             is_playoff=is_playoff,
+            home_avail=h_avail,
+            away_avail=a_avail,
+            home_splits=h_splits,
+            away_splits=a_splits,
+            h2h=h2h,
         )
 
         label = 1 if str(row["WL_home"]) == "W" else 0

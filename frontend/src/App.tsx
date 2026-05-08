@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Home } from './pages/Home';
 import { Bracket } from './pages/Bracket';
+import { Landing } from './pages/Landing';
 import './App.css';
 
-type View = 'predictions' | 'bracket';
+type View = 'landing' | 'nba-predictions' | 'nba-bracket';
 
 function HexLogo() {
   return (
@@ -19,7 +20,9 @@ function HexLogo() {
   );
 }
 
-function NavButton({ label, target, view, onChange }: { label: string; target: View; view: View; onChange: (v: View) => void }) {
+type NbaTab = 'nba-predictions' | 'nba-bracket';
+
+function NavButton({ label, target, view, onChange }: { label: string; target: NbaTab; view: View; onChange: (v: View) => void }) {
   const active = view === target;
   return (
     <button
@@ -56,6 +59,9 @@ function NavButton({ label, target, view, onChange }: { label: string; target: V
 }
 
 function Header({ view, onChange }: { view: View; onChange: (v: View) => void }) {
+  const onLanding = view === 'landing';
+  const isNba = view === 'nba-predictions' || view === 'nba-bracket';
+
   return (
     <header style={{
       position: 'sticky',
@@ -76,63 +82,105 @@ function Header({ view, onChange }: { view: View; onChange: (v: View) => void })
         alignItems: 'center',
         gap: '24px',
       }}>
-        {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <HexLogo />
-          <span style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: '22px',
-            fontWeight: 800,
-            letterSpacing: '0.06em',
-            color: 'var(--text-primary)',
-            textTransform: 'uppercase',
-          }}>
-            Stat<span style={{ color: 'var(--primary)' }}>Cast</span>
-          </span>
-          <span style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: '9px',
-            fontWeight: 600,
-            color: 'var(--primary)',
-            background: 'var(--primary-dim)',
-            border: '1px solid rgba(59,130,246,0.22)',
-            borderRadius: '3px',
-            padding: '2px 6px',
-            letterSpacing: '0.12em',
-          }}>
-            BETA
-          </span>
+        {/* Left: logo (clickable -> home) + breadcrumb */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <button
+            onClick={() => onChange('landing')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              padding: 0,
+              fontFamily: 'inherit',
+              color: 'inherit',
+            }}
+          >
+            <HexLogo />
+            <span style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: '22px',
+              fontWeight: 800,
+              letterSpacing: '0.06em',
+              color: 'var(--text-primary)',
+              textTransform: 'uppercase',
+            }}>
+              Stat<span style={{ color: 'var(--primary)' }}>Cast</span>
+            </span>
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '9px',
+              fontWeight: 600,
+              color: 'var(--primary)',
+              background: 'var(--primary-dim)',
+              border: '1px solid rgba(59,130,246,0.22)',
+              borderRadius: '3px',
+              padding: '2px 6px',
+              letterSpacing: '0.12em',
+            }}>
+              BETA
+            </span>
+          </button>
+          {isNba && (
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '11px',
+              color: 'var(--text-muted)',
+              letterSpacing: '0.08em',
+            }}>
+              <span style={{ color: 'var(--text-secondary)' }}>/</span>
+              {' '}
+              <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>NBA</span>
+            </span>
+          )}
         </div>
 
-        {/* Center nav */}
+        {/* Center: NBA tabs only when on an NBA page */}
         <nav style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-          <NavButton label="Predictions" target="predictions" view={view} onChange={onChange} />
-          <NavButton label="Bracket" target="bracket" view={view} onChange={onChange} />
+          {isNba && (
+            <>
+              <NavButton label="Predictions" target="nba-predictions" view={view} onChange={onChange} />
+              <NavButton label="Bracket" target="nba-bracket" view={view} onChange={onChange} />
+            </>
+          )}
         </nav>
 
-        {/* Right: live indicator */}
+        {/* Right: contextual indicator */}
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <span style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            fontFamily: 'var(--font-mono)',
-            fontSize: '10px',
-            color: 'var(--text-muted)',
-            letterSpacing: '0.08em',
-          }}>
+          {onLanding ? (
             <span style={{
-              width: '6px',
-              height: '6px',
-              borderRadius: '50%',
-              background: 'var(--success)',
-              boxShadow: '0 0 8px var(--success)',
-              animation: 'pulse-dot 2.5s ease-in-out infinite',
-              display: 'inline-block',
-              flexShrink: 0,
-            }} />
-            NBA · LIVE DATA
-          </span>
+              fontFamily: 'var(--font-mono)',
+              fontSize: '10px',
+              color: 'var(--text-muted)',
+              letterSpacing: '0.08em',
+            }}>
+              AI · LIVE DATA
+            </span>
+          ) : (
+            <span style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '10px',
+              color: 'var(--text-muted)',
+              letterSpacing: '0.08em',
+            }}>
+              <span style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                background: 'var(--success)',
+                boxShadow: '0 0 8px var(--success)',
+                animation: 'pulse-dot 2.5s ease-in-out infinite',
+                display: 'inline-block',
+                flexShrink: 0,
+              }} />
+              NBA · LIVE DATA
+            </span>
+          )}
         </div>
       </div>
     </header>
@@ -140,12 +188,18 @@ function Header({ view, onChange }: { view: View; onChange: (v: View) => void })
 }
 
 export default function App() {
-  const [view, setView] = useState<View>('predictions');
+  const [view, setView] = useState<View>('landing');
+
+  const handleSportSelect = (sportKey: string) => {
+    if (sportKey === 'nba') setView('nba-predictions');
+  };
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
       <Header view={view} onChange={setView} />
-      {view === 'predictions' ? <Home /> : <Bracket />}
+      {view === 'landing' && <Landing onSelectSport={handleSportSelect} />}
+      {view === 'nba-predictions' && <Home />}
+      {view === 'nba-bracket' && <Bracket />}
     </div>
   );
 }

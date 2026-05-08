@@ -27,6 +27,29 @@ def _sleep():
     time.sleep(0.65)
 
 
+# NBA GAME_ID format: 10-digit string where index 2 encodes season type.
+# 0021xxxxxx = Preseason, 0022xxxxxx = Regular Season, 0042xxxxxx = Playoffs,
+# 0052xxxxxx = Play-in. We check this to derive is_playoff cheaply, but if
+# the format ever changes the assertion below will surface it loudly.
+_VALID_GAME_ID_PREFIXES = {"1", "2", "4", "5"}
+
+
+def is_playoff_game_id(game_id: str | int) -> bool:
+    """
+    True if `game_id` follows the NBA convention for a playoff game.
+    Pads ints to the canonical 10-digit form so callers don't have to.
+    Logs a warning (rather than raising) on unexpected formats so a future
+    NBA schema change surfaces in logs without breaking inference.
+    """
+    s = str(game_id)
+    if s.isdigit():
+        s = s.zfill(10)
+    if len(s) < 3 or s[2:3] not in _VALID_GAME_ID_PREFIXES:
+        print(f"[nba_data] WARNING: unexpected GAME_ID format: {game_id!r}")
+        return False
+    return s[2:3] == "4"
+
+
 # ---------------------------------------------------------------------------
 # Today's games
 # ---------------------------------------------------------------------------
@@ -412,6 +435,101 @@ def compute_team_recent_form(
         "recent_net_rtg": recent_net_rtg,
         "last_game_date": last_game_date,
     }
+
+
+def compute_home_road_splits(
+    team_id: int,
+    game_log: pd.DataFrame,
+    before_date: Optional[str] = None,
+) -> dict:
+    """
+    Win % at home and on the road for `team_id`.
+    MATCHUP contains "vs." for home games and "@" for away games.
+    """
+    if game_log is None or game_log.empty:
+        return {"home_w_pct": 0.5, "road_w_pct": 0.5}
+
+    team_log = game_log[game_log["TEAM_ID"] == team_id]
+    if before_date:
+        team_log = team_log[team_log["GAME_DATE"] < pd.Timestamp(before_date)]
+
+    if team_log.empty:
+        return {"home_w_pct": 0.5, "road_w_pct": 0.5}
+
+    is_home = team_log["MATCHUP"].str.contains(r" vs\. ", regex=True)
+    home_games = team_log[is_home]
+    road_games = team_log[~is_home]
+
+    home_w_pct = (
+        float((home_games["WL"] == "W").sum() / len(home_games))
+        if len(home_games) > 0 else 0.5
+    )
+    road_w_pct = (
+        float((road_games["WL"] == "W").sum() / len(road_games))
+        if len(road_games) > 0 else 0.5
+    )
+    return {"home_w_pct": home_w_pct, "road_w_pct": road_w_pct}
+
+
+def compute_h2h_features(
+    home_id: int,
+    away_id: int,
+    game_log: pd.DataFrame,
+    before_date: Optional[str] = None,
+    is_playoff: bool = False,
+) -> dict:
+    """
+    Head-to-head and series-state features for the upcoming game.
+
+    Returns dict with:
+      home_won_last     +1.0 if home won the most recent prior meeting,
+                        -1.0 if away won it, 0.0 if no prior meetings
+      series_lead       (home_wins - away_wins) in the current playoff series
+                        before this game; 0.0 for non-playoff games
+    """
+    default = {"home_won_last": 0.0, "series_lead": 0.0}
+    if game_log is None or game_log.empty:
+        return default
+
+    # Find all games where both teams faced each other
+    # GAME_ID is the same for both teams' rows; we filter to home team's
+    # rows and look at OPP via MATCHUP, but simpler: get game_ids that
+    # contain both team_ids in the log.
+    home_games = game_log[game_log["TEAM_ID"] == home_id]
+    if home_games.empty:
+        return default
+
+    if before_date:
+        cutoff = pd.Timestamp(before_date)
+        home_games = home_games[home_games["GAME_DATE"] < cutoff]
+
+    if home_games.empty:
+        return default
+
+    # Filter to games where the OPPONENT was the away team
+    away_games_in_log = game_log[game_log["TEAM_ID"] == away_id]
+    if before_date:
+        away_games_in_log = away_games_in_log[away_games_in_log["GAME_DATE"] < pd.Timestamp(before_date)]
+    away_game_ids = set(away_games_in_log["GAME_ID"].tolist())
+
+    h2h = home_games[home_games["GAME_ID"].isin(away_game_ids)].sort_values("GAME_DATE")
+    if h2h.empty:
+        return default
+
+    last = h2h.iloc[-1]
+    home_won_last = 1.0 if last["WL"] == "W" else -1.0
+
+    # Series lead — only meaningful for playoff games. Uses the same
+    # GAME_ID convention helper as the inference path.
+    series_lead = 0.0
+    if is_playoff:
+        h2h_playoff = h2h[h2h["GAME_ID"].astype(str).map(is_playoff_game_id)]
+        if not h2h_playoff.empty:
+            home_wins = int((h2h_playoff["WL"] == "W").sum())
+            away_wins = int((h2h_playoff["WL"] == "L").sum())
+            series_lead = float(home_wins - away_wins)
+
+    return {"home_won_last": home_won_last, "series_lead": series_lead}
 
 
 def compute_rest_days(last_game_date: Optional[str], game_date: Optional[str] = None) -> int:

@@ -130,15 +130,19 @@ export function Home() {
     return () => { cancelled = true; };
   }, []);
 
-  // Auto-refresh every 60s when any game is live
+  // Auto-refresh every 60s when any game is live — also re-fetch accuracy so
+  // the banner ticks up the moment a game finishes.
   useEffect(() => {
     const hasLive = games.some(g => g.status === 'live');
     if (!hasLive) return;
     const id = setInterval(() => {
-      getGames().then(data => {
-        setGames(data);
-        setLastRefreshed(new Date());
-      }).catch(() => {});
+      Promise.all([getGames(), getAccuracy()])
+        .then(([gamesData, accuracyData]) => {
+          setGames(gamesData);
+          setAccuracy(accuracyData);
+          setLastRefreshed(new Date());
+        })
+        .catch(() => {});
     }, 60_000);
     return () => clearInterval(id);
   }, [games]);

@@ -92,11 +92,32 @@ def _persist_prediction(prediction: GamePrediction, game_date: str) -> None:
         print(f"[predictions] Could not persist prediction: {exc}")
 
 
+def _fetch_locked_predictions(game_ids: list[str]) -> dict[str, dict]:
+    """Pull any pre-existing (pre-tip-off) predictions for these games from Supabase."""
+    if not game_ids:
+        return {}
+    try:
+        from app.services.db import get_db
+        rows = (
+            get_db()
+            .table("predictions")
+            .select("game_id,predicted_winner,confidence")
+            .in_("game_id", game_ids)
+            .execute()
+            .data
+        )
+        return {r["game_id"]: r for r in rows}
+    except Exception as exc:
+        print(f"[predictions] Could not load locked predictions: {exc}")
+        return {}
+
+
 async def _build_prediction(
     game: dict,
     team_stats: dict,
     elo_ratings: dict,
     game_log: pd.DataFrame,
+    locked: dict | None = None,
 ) -> GamePrediction:
     home_id = game["home_team_id"]
     away_id = game["away_team_id"]
@@ -107,9 +128,18 @@ async def _build_prediction(
     h_stats = team_stats.get(home_id, {})
     a_stats = team_stats.get(away_id, {})
 
-    h_recent, a_recent = await asyncio.gather(
+    from app.services import player_availability
+
+    is_playoff = nba_data.is_playoff_game_id(game["id"])
+
+    h_recent, a_recent, h_avail, a_avail, h_splits, a_splits, h2h = await asyncio.gather(
         asyncio.to_thread(nba_data.compute_team_recent_form, home_id, game_log, 10),
         asyncio.to_thread(nba_data.compute_team_recent_form, away_id, game_log, 10),
+        asyncio.to_thread(player_availability.compute_team_availability, home_id, nba_data.CURRENT_SEASON, game_date),
+        asyncio.to_thread(player_availability.compute_team_availability, away_id, nba_data.CURRENT_SEASON, game_date),
+        asyncio.to_thread(nba_data.compute_home_road_splits, home_id, game_log, game_date),
+        asyncio.to_thread(nba_data.compute_home_road_splits, away_id, game_log, game_date),
+        asyncio.to_thread(nba_data.compute_h2h_features, home_id, away_id, game_log, game_date, is_playoff),
     )
 
     h_rest = nba_data.compute_rest_days(h_recent.get("last_game_date"), game_date)
@@ -118,8 +148,6 @@ async def _build_prediction(
     h_elo = float(elo_ratings.get(home_id, 1500.0))
     a_elo = float(elo_ratings.get(away_id, 1500.0))
 
-    is_playoff = str(game["id"])[2:3] == "4"
-
     engine = get_prediction_engine()
     result = engine.generate_prediction(
         h_stats, a_stats,
@@ -127,9 +155,22 @@ async def _build_prediction(
         h_elo, a_elo,
         h_rest, a_rest,
         is_playoff=is_playoff,
+        home_avail=h_avail,
+        away_avail=a_avail,
+        home_splits=h_splits,
+        away_splits=a_splits,
+        h2h=h2h,
     )
 
-    predicted_winner = home_name if result["predicted_winner_is_home"] else away_name
+    # If we already persisted a prediction for this game (pre-tip-off), use those
+    # locked values for the displayed winner + confidence so we don't appear to
+    # flip-flop as features update during/after the game.
+    if locked is not None:
+        predicted_winner = str(locked["predicted_winner"])
+        confidence = float(locked["confidence"])
+    else:
+        predicted_winner = home_name if result["predicted_winner_is_home"] else away_name
+        confidence = result["confidence"]
 
     reason_texts = generate_reasons(
         home_team=home_name,
@@ -152,7 +193,7 @@ async def _build_prediction(
         home_team_id=home_id,
         away_team_id=away_id,
         predicted_winner=predicted_winner,
-        confidence=result["confidence"],
+        confidence=confidence,
         predicted_home_score=result["predicted_home_score"],
         predicted_away_score=result["predicted_away_score"],
         reasons=[PredictionReason(text=t) for t in reason_texts],
@@ -164,6 +205,7 @@ async def _build_prediction(
         home_stats=_build_team_stats(h_stats, h_recent, h_elo, h_rest),
         away_stats=_build_team_stats(a_stats, a_recent, a_elo, a_rest),
         model_version=engine.model_version,
+        pregame_locked=locked is not None,
     )
 
 
@@ -210,11 +252,19 @@ async def warm_predictions(today: str | None = None) -> list[GamePrediction]:
             games = await asyncio.to_thread(nba_data.get_todays_games, today)
             team_stats, elo_ratings, game_log = await _fetch_shared_data()
 
+            # Pull any pre-tip-off predictions we already locked in
+            game_ids = [str(g["id"]) for g in games]
+            locked_lookup = await asyncio.to_thread(_fetch_locked_predictions, game_ids)
+
             predictions: list[GamePrediction] = []
             for game in games:
                 try:
-                    pred = await _build_prediction(game, team_stats, elo_ratings, game_log)
-                    _persist_prediction(pred, today)
+                    locked = locked_lookup.get(str(game["id"]))
+                    pred = await _build_prediction(game, team_stats, elo_ratings, game_log, locked=locked)
+                    # Only persist if there wasn't already a locked prediction.
+                    # This makes the first-ever prediction the "pre-tip-off" record.
+                    if locked is None:
+                        _persist_prediction(pred, today)
                     predictions.append(pred)
                 except Exception as exc:
                     print(f"[warming] Skipping game {game.get('id')}: {exc}")

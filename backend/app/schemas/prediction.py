@@ -37,6 +37,7 @@ class GamePrediction(BaseModel):
     home_pts: Optional[int] = None
     away_pts: Optional[int] = None
     game_time_utc: Optional[str] = None
+    pregame_locked: bool = False
     home_stats: Optional[TeamStats] = None
     away_stats: Optional[TeamStats] = None
     model_version: str = "rule-based"
