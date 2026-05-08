@@ -25,7 +25,7 @@ const SPORTS: Sport[] = [
     key: 'f1',
     name: 'F1',
     tagline: 'Formula 1 — race winner predictions',
-    status: 'coming-soon',
+    status: 'live',
     emoji: '🏎️',
     accent: '#ef4444',
   },
