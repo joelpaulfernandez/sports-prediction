@@ -12,9 +12,7 @@ interface Sport {
 
 const SPORTS: Sport[] = [
   { key: 'nba', name: 'NBA', tagline: 'Basketball — playoffs in progress', status: 'live', emoji: '🏀', accent: '#f59e0b' },
-  { key: 'nfl', name: 'NFL', tagline: 'Football — returning in fall', status: 'coming-soon', emoji: '🏈', accent: '#ef4444' },
-  { key: 'nhl', name: 'NHL', tagline: 'Hockey — soon', status: 'coming-soon', emoji: '🏒', accent: '#3b82f6' },
-  { key: 'mlb', name: 'MLB', tagline: 'Baseball — soon', status: 'coming-soon', emoji: '⚾', accent: '#10b981' },
+  { key: 'f1',  name: 'F1',  tagline: 'Formula 1 — race winner predictions',     status: 'coming-soon', emoji: '🏎️', accent: '#ef4444' },
 ];
 
 interface Props {
