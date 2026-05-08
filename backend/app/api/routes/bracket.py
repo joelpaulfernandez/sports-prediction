@@ -39,14 +39,19 @@ def _build_bracket(season: str = nba_data.CURRENT_SEASON) -> dict:
     except Exception as exc:
         print(f"[bracket] Could not load predictions: {exc}")
 
-    # Find any games that are currently live so we don't mark them
-    # as "predicted wrong" or count them toward the series score yet.
+    # Cross-reference with the live scoreboard. LeagueGameFinder lags real
+    # game-end by several minutes — its WL and PTS columns may still hold
+    # provisional values right after a buzzer. The live scoreboard is the
+    # ground truth for status and current/final scores.
+    live_lookup: dict[str, dict] = {}
     live_game_ids: set[str] = set()
     try:
         live_games = nba_data._games_from_live_scoreboard() or []
-        live_game_ids = {
-            str(g["id"]) for g in live_games if int(g.get("status_id", 1)) == 2
-        }
+        for g in live_games:
+            gid = str(g["id"])
+            live_lookup[gid] = g
+            if int(g.get("status_id", 1)) == 2:
+                live_game_ids.add(gid)
     except Exception as exc:
         print(f"[bracket] Could not load live scoreboard: {exc}")
 
@@ -76,19 +81,36 @@ def _build_bracket(season: str = nba_data.CURRENT_SEASON) -> dict:
             game_id = str(r["GAME_ID"])
             home_id = int(r["TEAM_ID_home"])
             away_id = int(r["TEAM_ID_away"])
-            home_pts = int(r["PTS_home"]) if not _isnan(r.get("PTS_home")) else None
-            away_pts = int(r["PTS_away"]) if not _isnan(r.get("PTS_away")) else None
             is_live = game_id in live_game_ids
 
-            home_won = str(r["WL_home"]) == "W"
-            # For live games WL is provisional (reflects current leader),
-            # so don't trust it for "actual winner" / correctness annotation.
-            actual_winner_id = (
-                None if is_live else (home_id if home_won else away_id)
+            # Prefer live scoreboard scores when available — LeagueGameFinder
+            # holds stale Q3/Q4 partials for several minutes post-buzzer.
+            live = live_lookup.get(game_id)
+            if live and live.get("home_pts") is not None and live.get("away_pts") is not None:
+                home_pts = int(live["home_pts"])
+                away_pts = int(live["away_pts"])
+            else:
+                home_pts = int(r["PTS_home"]) if not _isnan(r.get("PTS_home")) else None
+                away_pts = int(r["PTS_away"]) if not _isnan(r.get("PTS_away")) else None
+
+            # Determine winner from points rather than the WL column. WL can lag
+            # the box score by several minutes for just-finished games.
+            home_won = (
+                home_pts > away_pts
+                if home_pts is not None and away_pts is not None
+                else None
             )
 
+            actual_winner_id: Optional[int] = None
+            actual_winner_name: Optional[str] = None
+            if not is_live and home_won is not None:
+                actual_winner_id = home_id if home_won else away_id
+                actual_winner_name = (
+                    str(r["TEAM_NAME_home"]) if home_won else str(r["TEAM_NAME_away"])
+                )
+
             # Only count completed games toward the series score
-            if not is_live:
+            if actual_winner_id is not None:
                 if actual_winner_id == higher_id:
                     higher_wins += 1
                 else:
@@ -97,11 +119,6 @@ def _build_bracket(season: str = nba_data.CURRENT_SEASON) -> dict:
             pred = pred_lookup.get(game_id)
             predicted_winner_name = pred.get("predicted_winner") if pred else None
             confidence = pred.get("confidence") if pred else None
-            actual_winner_name = None
-            if not is_live:
-                actual_winner_name = (
-                    str(r["TEAM_NAME_home"]) if home_won else str(r["TEAM_NAME_away"])
-                )
 
             correct: Optional[bool]
             if is_live or predicted_winner_name is None or actual_winner_name is None:
@@ -188,7 +205,7 @@ def _isnan(v) -> bool:
 @router.get("/bracket")
 async def get_bracket():
     """Return the playoff bracket with prediction accuracy per game."""
-    cache_key = "playoff_bracket_v3"
+    cache_key = "playoff_bracket_v4"
     cached = cache_get(cache_key)
     if cached is not None:
         return cached
