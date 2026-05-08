@@ -5,6 +5,8 @@ All functions are synchronous; use asyncio.to_thread() in async route handlers.
 Results are cached in-memory with TTL to respect NBA stats API rate limits.
 """
 
+from __future__ import annotations
+
 import datetime
 import time
 import random

@@ -5,6 +5,8 @@ All NBA data fetching is pre-warmed in the background at startup and refreshed
 on a schedule. Route handlers serve from an in-memory cache and return in < 100 ms.
 """
 
+from __future__ import annotations
+
 import asyncio
 from datetime import date, datetime, timezone
 from typing import Optional

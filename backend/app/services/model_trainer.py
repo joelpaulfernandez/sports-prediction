@@ -17,6 +17,8 @@ Running time: ~3-5 minutes on first run (API calls, ~3 seasons × ~1 230 games).
 The trained artifact is cached at settings.model_path and auto-loaded on restart.
 """
 
+from __future__ import annotations
+
 import os
 import time
 import json
