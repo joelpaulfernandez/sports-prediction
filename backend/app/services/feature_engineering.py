@@ -51,6 +51,13 @@ Context features (added in v4)
 33  home_home_w_pct      home team's win % in home games this season
 34  away_road_w_pct      away team's win % in road games this season
 35  venue_w_pct_diff     home_home_w_pct - away_road_w_pct
+
+Playoff / matchup history features (added in v5)
+────────────────────────────────────────────────
+36  home_won_last_h2h    +1.0 if home won most recent prior meeting,
+                         -1.0 if away won it, 0.0 if no prior meetings
+37  series_lead          (home_wins - away_wins) in current playoff series
+                         before this game; 0.0 for non-playoff games
 """
 
 import numpy as np
@@ -92,6 +99,8 @@ FEATURE_NAMES = [
     "home_home_w_pct",
     "away_road_w_pct",
     "venue_w_pct_diff",
+    "home_won_last_h2h",
+    "series_lead",
 ]
 
 N_FEATURES = len(FEATURE_NAMES)
@@ -119,6 +128,7 @@ def build_features(
     away_avail: dict | None = None,
     home_splits: dict | None = None,
     away_splits: dict | None = None,
+    h2h: dict | None = None,
 ) -> np.ndarray:
     """
     Return a float32 array of shape (N_FEATURES,) for a single matchup.
@@ -210,6 +220,8 @@ def build_features(
         _g(away_splits or {}, "road_w_pct", 0.5),   # 34 away_road_w_pct
         _g(home_splits or {}, "home_w_pct", 0.5)
             - _g(away_splits or {}, "road_w_pct", 0.5),  # 35 venue_w_pct_diff
+        _g(h2h or {}, "home_won_last", 0.0),    # 36 home_won_last_h2h
+        _g(h2h or {}, "series_lead", 0.0),      # 37 series_lead
     ], dtype=np.float32)
 
     return features

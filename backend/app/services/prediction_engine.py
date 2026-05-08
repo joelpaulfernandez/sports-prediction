@@ -97,6 +97,7 @@ class PredictionEngine:
         away_avail: dict | None = None,
         home_splits: dict | None = None,
         away_splits: dict | None = None,
+        h2h: dict | None = None,
     ) -> dict:
         """
         Return prediction dict:
@@ -113,6 +114,7 @@ class PredictionEngine:
             away_avail=away_avail,
             home_splits=home_splits,
             away_splits=away_splits,
+            h2h=h2h,
         )
 
         if self._model is not None:

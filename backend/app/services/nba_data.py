@@ -448,6 +448,67 @@ def compute_home_road_splits(
     return {"home_w_pct": home_w_pct, "road_w_pct": road_w_pct}
 
 
+def compute_h2h_features(
+    home_id: int,
+    away_id: int,
+    game_log: pd.DataFrame,
+    before_date: Optional[str] = None,
+    is_playoff: bool = False,
+) -> dict:
+    """
+    Head-to-head and series-state features for the upcoming game.
+
+    Returns dict with:
+      home_won_last     +1.0 if home won the most recent prior meeting,
+                        -1.0 if away won it, 0.0 if no prior meetings
+      series_lead       (home_wins - away_wins) in the current playoff series
+                        before this game; 0.0 for non-playoff games
+    """
+    default = {"home_won_last": 0.0, "series_lead": 0.0}
+    if game_log is None or game_log.empty:
+        return default
+
+    # Find all games where both teams faced each other
+    # GAME_ID is the same for both teams' rows; we filter to home team's
+    # rows and look at OPP via MATCHUP, but simpler: get game_ids that
+    # contain both team_ids in the log.
+    home_games = game_log[game_log["TEAM_ID"] == home_id]
+    if home_games.empty:
+        return default
+
+    if before_date:
+        cutoff = pd.Timestamp(before_date)
+        home_games = home_games[home_games["GAME_DATE"] < cutoff]
+
+    if home_games.empty:
+        return default
+
+    # Filter to games where the OPPONENT was the away team
+    away_games_in_log = game_log[game_log["TEAM_ID"] == away_id]
+    if before_date:
+        away_games_in_log = away_games_in_log[away_games_in_log["GAME_DATE"] < pd.Timestamp(before_date)]
+    away_game_ids = set(away_games_in_log["GAME_ID"].tolist())
+
+    h2h = home_games[home_games["GAME_ID"].isin(away_game_ids)].sort_values("GAME_DATE")
+    if h2h.empty:
+        return default
+
+    last = h2h.iloc[-1]
+    home_won_last = 1.0 if last["WL"] == "W" else -1.0
+
+    # Series lead — only meaningful for playoff games. NBA playoff GAME_IDs
+    # have '4' at index 2 (e.g. "0042500131").
+    series_lead = 0.0
+    if is_playoff:
+        h2h_playoff = h2h[h2h["GAME_ID"].astype(str).str[2:3] == "4"]
+        if not h2h_playoff.empty:
+            home_wins = int((h2h_playoff["WL"] == "W").sum())
+            away_wins = int((h2h_playoff["WL"] == "L").sum())
+            series_lead = float(home_wins - away_wins)
+
+    return {"home_won_last": home_won_last, "series_lead": series_lead}
+
+
 def compute_rest_days(last_game_date: Optional[str], game_date: Optional[str] = None) -> int:
     """Days between last game and upcoming game, capped at 7."""
     if not last_game_date:

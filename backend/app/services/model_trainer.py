@@ -229,6 +229,12 @@ def _build_examples_for_type(
         h_splits = nba_data.compute_home_road_splits(home_id, game_log, before_date=game_date_str)
         a_splits = nba_data.compute_home_road_splits(away_id, game_log, before_date=game_date_str)
 
+        # H2H + playoff series state — also leakage-safe (before_date is exclusive)
+        h2h = nba_data.compute_h2h_features(
+            home_id, away_id, game_log,
+            before_date=game_date_str, is_playoff=is_playoff,
+        )
+
         features = build_features(
             h, a,
             h_recent, a_recent,
@@ -239,6 +245,7 @@ def _build_examples_for_type(
             away_avail=a_avail,
             home_splits=h_splits,
             away_splits=a_splits,
+            h2h=h2h,
         )
 
         label = 1 if str(row["WL_home"]) == "W" else 0

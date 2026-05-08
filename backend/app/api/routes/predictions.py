@@ -130,13 +130,16 @@ async def _build_prediction(
 
     from app.services import player_availability
 
-    h_recent, a_recent, h_avail, a_avail, h_splits, a_splits = await asyncio.gather(
+    is_playoff = str(game["id"])[2:3] == "4"
+
+    h_recent, a_recent, h_avail, a_avail, h_splits, a_splits, h2h = await asyncio.gather(
         asyncio.to_thread(nba_data.compute_team_recent_form, home_id, game_log, 10),
         asyncio.to_thread(nba_data.compute_team_recent_form, away_id, game_log, 10),
         asyncio.to_thread(player_availability.compute_team_availability, home_id, nba_data.CURRENT_SEASON, game_date),
         asyncio.to_thread(player_availability.compute_team_availability, away_id, nba_data.CURRENT_SEASON, game_date),
         asyncio.to_thread(nba_data.compute_home_road_splits, home_id, game_log, game_date),
         asyncio.to_thread(nba_data.compute_home_road_splits, away_id, game_log, game_date),
+        asyncio.to_thread(nba_data.compute_h2h_features, home_id, away_id, game_log, game_date, is_playoff),
     )
 
     h_rest = nba_data.compute_rest_days(h_recent.get("last_game_date"), game_date)
@@ -144,8 +147,6 @@ async def _build_prediction(
 
     h_elo = float(elo_ratings.get(home_id, 1500.0))
     a_elo = float(elo_ratings.get(away_id, 1500.0))
-
-    is_playoff = str(game["id"])[2:3] == "4"
 
     engine = get_prediction_engine()
     result = engine.generate_prediction(
@@ -158,6 +159,7 @@ async def _build_prediction(
         away_avail=a_avail,
         home_splits=h_splits,
         away_splits=a_splits,
+        h2h=h2h,
     )
 
     # If we already persisted a prediction for this game (pre-tip-off), use those
