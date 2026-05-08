@@ -18,10 +18,8 @@ function teamColor(team: string): string {
   return `hsl(${hue}, 60%, 55%)`;
 }
 
-function positionMedal(pos: number) {
-  const medals = ['🥇', '🥈', '🥉'];
-  if (pos <= 3) return medals[pos - 1];
-  return null;
+function positionLabel(pos: number) {
+  return `P${pos}`;
 }
 
 // ── Side-by-side comparison for one race ─────────────────────────────────────
@@ -168,7 +166,10 @@ function DriverList({ label, drivers, actual, predicted, side }: {
           const compareDriver = compareList?.find(c => c.driver_id === d.driver_id);
           const samePosition = compareDriver?.position === d.position;
           const isWinner = d.position === 1;
+          const isPodium = d.position <= 3;
           const color = teamColor(d.team);
+          const podiumColors = ['var(--accent)', '#C0C0C0', '#CD7F32'];
+          const posColor = isPodium ? podiumColors[d.position - 1] : 'var(--text-muted)';
 
           return (
             <div key={d.driver_id} style={{
@@ -178,37 +179,37 @@ function DriverList({ label, drivers, actual, predicted, side }: {
               gap: '8px',
               padding: '4px 6px',
               borderRadius: '4px',
-              background: isWinner ? 'rgba(255,255,255,0.03)' : 'transparent',
-              border: isWinner ? '1px solid var(--border)' : '1px solid transparent',
+              background: isPodium ? 'rgba(255,255,255,0.02)' : 'transparent',
+              border: isPodium ? '1px solid var(--border)' : '1px solid transparent',
             }}>
               {/* Position */}
               <span style={{
                 fontFamily: 'var(--font-mono)',
-                fontSize: isWinner ? '13px' : '11px',
-                fontWeight: isWinner ? 700 : 400,
-                color: isWinner ? 'var(--accent)' : 'var(--text-muted)',
+                fontSize: isPodium ? '13px' : '11px',
+                fontWeight: isPodium ? 700 : 400,
+                color: posColor,
                 textAlign: 'right',
               }}>
-                {positionMedal(d.position) ?? `P${d.position}`}
+                {positionLabel(d.position)}
               </span>
 
               {/* Team color */}
               <div style={{
-                width: '3px', height: isWinner ? '24px' : '18px',
+                width: '3px', height: isPodium ? '24px' : '18px',
                 borderRadius: '2px', background: color,
-                boxShadow: isWinner ? `0 0 5px ${color}88` : 'none',
+                boxShadow: isPodium ? `0 0 5px ${color}88` : 'none',
               }} />
 
               {/* Name + team */}
               <div style={{ minWidth: 0 }}>
                 <div style={{
-                  fontFamily: isWinner ? 'var(--font-display)' : 'var(--font-body)',
-                  fontSize: isWinner ? '12px' : '11px',
-                  fontWeight: isWinner ? 700 : 400,
-                  color: samePosition ? 'var(--success)' : isWinner ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  fontFamily: isPodium ? 'var(--font-display)' : 'var(--font-body)',
+                  fontSize: isPodium ? '12px' : '11px',
+                  fontWeight: isPodium ? 700 : 400,
+                  color: samePosition ? 'var(--success)' : isPodium ? 'var(--text-primary)' : 'var(--text-secondary)',
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                  letterSpacing: isWinner ? '0.03em' : '0',
-                  textTransform: isWinner ? 'uppercase' : 'none',
+                  letterSpacing: isPodium ? '0.03em' : '0',
+                  textTransform: isPodium ? 'uppercase' : 'none',
                 }}>
                   {d.driver.split(' ').pop()}
                   {samePosition && (

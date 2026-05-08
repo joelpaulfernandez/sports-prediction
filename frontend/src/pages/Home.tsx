@@ -175,8 +175,18 @@ function TabBar({ active, onChange, hasLiveNba }: TabBarProps) {
 
 // ── Home ──────────────────────────────────────────────────────────────────────
 
-export function Home() {
-  const [activeTab, setActiveTab] = useState<Tab>('nba');
+interface HomeProps {
+  initialTab?: Tab;
+  onTabChange?: (tab: Tab) => void;
+}
+
+export function Home({ initialTab = 'nba', onTabChange }: HomeProps) {
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
+
+  const handleTabChange = (tab: Tab) => {
+    setActiveTab(tab);
+    onTabChange?.(tab);
+  };
 
   // NBA state
   const [games, setGames] = useState<GamePrediction[]>([]);
@@ -363,7 +373,7 @@ export function Home() {
             </p>
 
             {/* Tab bar */}
-            <TabBar active={activeTab} onChange={setActiveTab} hasLiveNba={hasLive} />
+            <TabBar active={activeTab} onChange={handleTabChange} hasLiveNba={hasLive} />
 
             {/* NBA live indicator */}
             {activeTab === 'nba' && !loading && !error && games.length > 0 && (

@@ -4,7 +4,8 @@ import { Bracket } from './pages/Bracket';
 import { Landing } from './pages/Landing';
 import './App.css';
 
-type View = 'landing' | 'nba-predictions' | 'nba-bracket';
+type View = 'landing' | 'predictions' | 'nba-bracket';
+type Sport = 'nba' | 'f1';
 
 function HexLogo() {
   return (
@@ -20,9 +21,9 @@ function HexLogo() {
   );
 }
 
-type NbaTab = 'nba-predictions' | 'nba-bracket';
+type NavTarget = 'predictions' | 'nba-bracket';
 
-function NavButton({ label, target, view, onChange }: { label: string; target: NbaTab; view: View; onChange: (v: View) => void }) {
+function NavButton({ label, target, view, onChange }: { label: string; target: NavTarget; view: View; onChange: (v: View) => void }) {
   const active = view === target;
   return (
     <button
@@ -58,9 +59,9 @@ function NavButton({ label, target, view, onChange }: { label: string; target: N
   );
 }
 
-function Header({ view, onChange }: { view: View; onChange: (v: View) => void }) {
+function Header({ view, activeSport, onChange }: { view: View; activeSport: Sport; onChange: (v: View) => void }) {
   const onLanding = view === 'landing';
-  const isNba = view === 'nba-predictions' || view === 'nba-bracket';
+  const isPredictions = view === 'predictions' || view === 'nba-bracket';
 
   return (
     <header style={{
@@ -123,7 +124,7 @@ function Header({ view, onChange }: { view: View; onChange: (v: View) => void })
               BETA
             </span>
           </button>
-          {isNba && (
+          {isPredictions && (
             <span style={{
               fontFamily: 'var(--font-mono)',
               fontSize: '11px',
@@ -132,16 +133,18 @@ function Header({ view, onChange }: { view: View; onChange: (v: View) => void })
             }}>
               <span style={{ color: 'var(--text-secondary)' }}>/</span>
               {' '}
-              <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>NBA</span>
+              <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
+                {activeSport === 'f1' ? 'F1' : 'NBA'}
+              </span>
             </span>
           )}
         </div>
 
-        {/* Center: NBA tabs only when on an NBA page */}
+        {/* Center: nav tabs when on a predictions/bracket page */}
         <nav style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-          {isNba && (
+          {isPredictions && activeSport === 'nba' && (
             <>
-              <NavButton label="Predictions" target="nba-predictions" view={view} onChange={onChange} />
+              <NavButton label="Predictions" target="predictions" view={view} onChange={onChange} />
               <NavButton label="Bracket" target="nba-bracket" view={view} onChange={onChange} />
             </>
           )}
@@ -178,7 +181,7 @@ function Header({ view, onChange }: { view: View; onChange: (v: View) => void })
                 display: 'inline-block',
                 flexShrink: 0,
               }} />
-              NBA · LIVE DATA
+              {activeSport === 'f1' ? 'F1' : 'NBA'} · LIVE DATA
             </span>
           )}
         </div>
@@ -189,16 +192,25 @@ function Header({ view, onChange }: { view: View; onChange: (v: View) => void })
 
 export default function App() {
   const [view, setView] = useState<View>('landing');
+  const [activeSport, setActiveSport] = useState<Sport>('nba');
 
   const handleSportSelect = (sportKey: string) => {
-    if (sportKey === 'nba') setView('nba-predictions');
+    if (sportKey === 'nba' || sportKey === 'f1') {
+      setActiveSport(sportKey as Sport);
+      setView('predictions');
+    }
   };
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
-      <Header view={view} onChange={setView} />
+      <Header view={view} activeSport={activeSport} onChange={setView} />
       {view === 'landing' && <Landing onSelectSport={handleSportSelect} />}
-      {view === 'nba-predictions' && <Home />}
+      {view === 'predictions' && (
+        <Home
+          initialTab={activeSport === 'f1' ? 'f1' : 'nba'}
+          onTabChange={tab => setActiveSport(tab === 'f1' ? 'f1' : 'nba')}
+        />
+      )}
       {view === 'nba-bracket' && <Bracket />}
     </div>
   );
