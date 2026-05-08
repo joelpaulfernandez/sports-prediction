@@ -2,8 +2,8 @@
 Accuracy tracking route.
 
 GET  /api/accuracy          — return historical accuracy stats
-POST /api/accuracy/update   — check yesterday's predictions against actual results
-                               and update the accuracy log (called from startup)
+POST /api/accuracy/update   — resolve any unresolved predictions whose game has
+                              finished (today, yesterday, or further back)
 """
 
 import datetime
@@ -47,50 +47,57 @@ def get_accuracy():
 @router.post("/accuracy/update", status_code=200)
 async def update_accuracy():
     """
-    Resolve yesterday's predictions against actual game results.
-    Called automatically on server startup and can be called manually.
+    Resolve any predictions whose game has finished but isn't yet in
+    accuracy_log. Looks at today and yesterday so live games that wrap up are
+    picked up promptly without waiting for tomorrow's startup.
     """
     import asyncio
     from app.services import nba_data
 
     db = get_db()
-    yesterday = str(datetime.date.today() - datetime.timedelta(days=1))
+    today = datetime.date.today()
+    target_dates = [str(today - datetime.timedelta(days=1)), str(today)]
 
+    # Pull all stored predictions for those dates
     predictions = (
         db.table("predictions")
         .select("*")
-        .eq("game_date", yesterday)
+        .in_("game_date", target_dates)
         .execute()
         .data
     )
     if not predictions:
-        return {"updated": 0, "message": f"No predictions stored for {yesterday}"}
+        return {"updated": 0, "message": f"No predictions stored for {target_dates}"}
 
-    try:
-        games = await asyncio.to_thread(nba_data.get_todays_games, yesterday)
-    except Exception as exc:
-        return {"updated": 0, "message": f"Could not fetch results: {exc}"}
-
-    actual_winners: dict[str, str] = {}
-    for game in games:
-        if game.get("status_id") == 3:
+    # Fetch finished games per date and aggregate winners
+    actual_winners: dict[str, dict] = {}
+    for d in target_dates:
+        try:
+            games = await asyncio.to_thread(nba_data.get_todays_games, d)
+        except Exception as exc:
+            print(f"[accuracy] Could not fetch results for {d}: {exc}")
+            continue
+        for game in games:
+            if int(game.get("status_id", 0)) != 3:
+                continue  # not finished
             home_pts = game.get("home_pts")
             away_pts = game.get("away_pts")
-            if home_pts is not None and away_pts is not None:
-                winner = (
-                    game["home_team_name"] if home_pts > away_pts
-                    else game["away_team_name"]
-                )
-                actual_winners[str(game["id"])] = winner
+            if home_pts is None or away_pts is None:
+                continue
+            winner = (
+                game["home_team_name"] if home_pts > away_pts
+                else game["away_team_name"]
+            )
+            actual_winners[str(game["id"])] = {"winner": winner, "date": d}
 
     if not actual_winners:
-        return {"updated": 0, "message": "No finished games found for yesterday"}
+        return {"updated": 0, "message": "No newly finished games to resolve"}
 
     already_logged = {
         r["game_id"]
         for r in db.table("accuracy_log")
         .select("game_id")
-        .in_("game_id", [p["game_id"] for p in predictions])
+        .in_("game_id", list(actual_winners.keys()))
         .execute()
         .data
     }
@@ -100,14 +107,15 @@ async def update_accuracy():
         gid = pred["game_id"]
         if gid in already_logged or gid not in actual_winners:
             continue
+        info = actual_winners[gid]
         rows_to_insert.append({
             "game_id": gid,
-            "game_date": yesterday,
+            "game_date": info["date"],
             "home_team": pred["home_team"],
             "away_team": pred["away_team"],
             "predicted_winner": pred["predicted_winner"],
-            "actual_winner": actual_winners[gid],
-            "correct": pred["predicted_winner"] == actual_winners[gid],
+            "actual_winner": info["winner"],
+            "correct": pred["predicted_winner"] == info["winner"],
             "confidence": pred.get("confidence"),
             "timestamp": datetime.datetime.now(tz=timezone.utc).isoformat(),
         })
@@ -117,5 +125,5 @@ async def update_accuracy():
 
     return {
         "updated": len(rows_to_insert),
-        "message": f"Resolved {len(rows_to_insert)} predictions for {yesterday}",
+        "message": f"Resolved {len(rows_to_insert)} prediction(s)",
     }

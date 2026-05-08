@@ -7,7 +7,7 @@ export interface BracketGame {
   away_team_name: string;
   home_pts: number | null;
   away_pts: number | null;
-  actual_winner_id: number;
+  actual_winner_id: number | null;
   predicted_winner_name: string | null;
   confidence: number | null;
   correct: boolean | null;
