@@ -93,6 +93,8 @@ class PredictionEngine:
         home_rest: int = 3,
         away_rest: int = 3,
         is_playoff: bool = False,
+        home_avail: dict | None = None,
+        away_avail: dict | None = None,
     ) -> dict:
         """
         Return prediction dict:
@@ -105,6 +107,8 @@ class PredictionEngine:
             home_elo, away_elo,
             home_rest, away_rest,
             is_playoff=is_playoff,
+            home_avail=home_avail,
+            away_avail=away_avail,
         )
 
         if self._model is not None:

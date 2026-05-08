@@ -1,9 +1,8 @@
 """
 Feature engineering for NBA game prediction.
 
-Builds a 20-element feature vector for each matchup.  All features are framed
-so that a positive value is "good for the home team", which aligns with the
-model label (1 = home team wins).
+All features are framed so that a positive value is "good for the home team",
+which aligns with the model label (1 = home team wins).
 
 Feature index map
 ─────────────────
@@ -28,6 +27,14 @@ Feature index map
 18  pts_margin_diff       home avg point margin - away avg point margin
 19  home_court            always 1.0  (constant, learned weight = home advantage)
 20  is_playoff            1.0 for playoff games, 0.0 for regular season
+
+Player availability features (added in v2)
+──────────────────────────────────────────
+21  star_min_ratio_diff   home star_minutes_ratio - away star_minutes_ratio
+22  top3_min_ratio_diff   home top3_minutes_ratio - away top3_minutes_ratio
+23  rotation_size_diff    home rotation_size      - away rotation_size
+24  home_star_min_ratio   absolute home star minutes share (last 3 games)
+25  away_star_min_ratio   absolute away star minutes share
 """
 
 import numpy as np
@@ -54,6 +61,11 @@ FEATURE_NAMES = [
     "pts_margin_diff",
     "home_court",
     "is_playoff",
+    "star_min_ratio_diff",
+    "top3_min_ratio_diff",
+    "rotation_size_diff",
+    "home_star_min_ratio",
+    "away_star_min_ratio",
 ]
 
 N_FEATURES = len(FEATURE_NAMES)
@@ -77,6 +89,8 @@ def build_features(
     home_rest: int,
     away_rest: int,
     is_playoff: bool = False,
+    home_avail: dict | None = None,
+    away_avail: dict | None = None,
 ) -> np.ndarray:
     """
     Return a float32 array of shape (N_FEATURES,) for a single matchup.
@@ -119,6 +133,16 @@ def build_features(
     h_rnr  = _g(hr, "recent_net_rtg", h_net)
     a_rnr  = _g(ar, "recent_net_rtg", a_net)
 
+    # Player availability — falls back to neutral defaults when missing
+    h_avail = home_avail or {}
+    a_avail = away_avail or {}
+    h_star_ratio = _g(h_avail, "star_minutes_ratio", 0.20)
+    a_star_ratio = _g(a_avail, "star_minutes_ratio", 0.20)
+    h_top3_ratio = _g(h_avail, "top3_minutes_ratio", 0.45)
+    a_top3_ratio = _g(a_avail, "top3_minutes_ratio", 0.45)
+    h_rot_size = _g(h_avail, "rotation_size", 9.0)
+    a_rot_size = _g(a_avail, "rotation_size", 9.0)
+
     features = np.array([
         h_net - a_net,                        #  0 net_rtg_diff
         h_off - a_off,                        #  1 off_rtg_diff
@@ -141,6 +165,11 @@ def build_features(
         h_pm - a_pm,                          # 18 pts_margin_diff
         1.0,                                  # 19 home_court
         1.0 if is_playoff else 0.0,           # 20 is_playoff
+        h_star_ratio - a_star_ratio,          # 21 star_min_ratio_diff
+        h_top3_ratio - a_top3_ratio,          # 22 top3_min_ratio_diff
+        h_rot_size - a_rot_size,              # 23 rotation_size_diff
+        h_star_ratio,                         # 24 home_star_min_ratio
+        a_star_ratio,                         # 25 away_star_min_ratio
     ], dtype=np.float32)
 
     return features

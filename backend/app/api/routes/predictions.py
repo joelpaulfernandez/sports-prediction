@@ -128,9 +128,13 @@ async def _build_prediction(
     h_stats = team_stats.get(home_id, {})
     a_stats = team_stats.get(away_id, {})
 
-    h_recent, a_recent = await asyncio.gather(
+    from app.services import player_availability
+
+    h_recent, a_recent, h_avail, a_avail = await asyncio.gather(
         asyncio.to_thread(nba_data.compute_team_recent_form, home_id, game_log, 10),
         asyncio.to_thread(nba_data.compute_team_recent_form, away_id, game_log, 10),
+        asyncio.to_thread(player_availability.compute_team_availability, home_id, nba_data.CURRENT_SEASON, game_date),
+        asyncio.to_thread(player_availability.compute_team_availability, away_id, nba_data.CURRENT_SEASON, game_date),
     )
 
     h_rest = nba_data.compute_rest_days(h_recent.get("last_game_date"), game_date)
@@ -148,6 +152,8 @@ async def _build_prediction(
         h_elo, a_elo,
         h_rest, a_rest,
         is_playoff=is_playoff,
+        home_avail=h_avail,
+        away_avail=a_avail,
     )
 
     # If we already persisted a prediction for this game (pre-tip-off), use those

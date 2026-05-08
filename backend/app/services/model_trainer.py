@@ -25,7 +25,7 @@ import datetime
 import numpy as np
 import pandas as pd
 
-from app.services import nba_data
+from app.services import nba_data, player_availability
 from app.services.elo import EloSystem
 from app.services.feature_engineering import build_features, FEATURE_NAMES
 from app.config import get_settings
@@ -216,12 +216,18 @@ def _build_examples_for_type(
         h_elo = elo.get(home_id)
         a_elo = elo.get(away_id)
 
+        # Player availability — computed from games BEFORE this one (no leakage)
+        h_avail = player_availability.compute_team_availability(home_id, season, before_date=game_date_str)
+        a_avail = player_availability.compute_team_availability(away_id, season, before_date=game_date_str)
+
         features = build_features(
             h, a,
             h_recent, a_recent,
             h_elo, a_elo,
             h_rest, a_rest,
             is_playoff=is_playoff,
+            home_avail=h_avail,
+            away_avail=a_avail,
         )
 
         label = 1 if str(row["WL_home"]) == "W" else 0
