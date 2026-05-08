@@ -1,123 +1,151 @@
 import { useState } from 'react';
 import { Home } from './pages/Home';
 import { Bracket } from './pages/Bracket';
+import './App.css';
 
 type View = 'predictions' | 'bracket';
 
-function Header({ view, onChange }: { view: View; onChange: (v: View) => void }) {
-  const navLink = (label: string, target: View) => {
-    const active = view === target;
-    return (
-      <button
-        onClick={() => onChange(target)}
-        style={{
-          color: active ? '#f0f6ff' : '#8ca3be',
-          fontSize: '14px',
-          fontWeight: active ? 700 : 500,
-          padding: '7px 14px',
-          borderRadius: '8px',
-          background: active ? 'rgba(0,232,122,0.08)' : 'transparent',
-          border: active ? '1px solid rgba(0,232,122,0.2)' : '1px solid transparent',
-          cursor: 'pointer',
-          transition: 'all 0.15s',
-          fontFamily: 'inherit',
-        }}
-      >
-        {label}
-      </button>
-    );
-  };
+function HexLogo() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+      <polygon
+        points="14,2 24,7.5 24,20.5 14,26 4,20.5 4,7.5"
+        stroke="#3b82f6"
+        strokeWidth="1.5"
+        fill="rgba(59,130,246,0.1)"
+      />
+      <polygon points="14,8 19,11 19,17 14,20 9,17 9,11" fill="#3b82f6" fillOpacity="0.55" />
+    </svg>
+  );
+}
 
+function NavButton({ label, target, view, onChange }: { label: string; target: View; view: View; onChange: (v: View) => void }) {
+  const active = view === target;
+  return (
+    <button
+      onClick={() => onChange(target)}
+      style={{
+        fontFamily: 'var(--font-body)',
+        fontSize: '13px',
+        fontWeight: active ? 600 : 500,
+        color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+        padding: '6px 14px',
+        borderRadius: '6px',
+        background: active ? 'var(--primary-dim)' : 'transparent',
+        border: active ? '1px solid rgba(59,130,246,0.22)' : '1px solid transparent',
+        cursor: 'pointer',
+        transition: 'color 0.15s, background 0.15s, border-color 0.15s',
+        letterSpacing: '0.01em',
+      }}
+      onMouseEnter={(e) => {
+        if (!active) {
+          (e.currentTarget as HTMLElement).style.color = 'var(--text-primary)';
+          (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.05)';
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!active) {
+          (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)';
+          (e.currentTarget as HTMLElement).style.background = 'transparent';
+        }
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function Header({ view, onChange }: { view: View; onChange: (v: View) => void }) {
   return (
     <header style={{
-      background: 'rgba(8, 15, 26, 0.85)',
-      backdropFilter: 'blur(16px)',
-      borderBottom: '1px solid #1e2d40',
       position: 'sticky',
       top: 0,
       zIndex: 100,
+      background: 'rgba(10, 10, 15, 0.90)',
+      backdropFilter: 'blur(20px)',
+      WebkitBackdropFilter: 'blur(20px)',
+      boxShadow: '0 1px 0 rgba(59,130,246,0.10), 0 4px 24px rgba(0,0,0,0.5)',
     }}>
       <div style={{
-        maxWidth: '1180px',
+        maxWidth: '1200px',
         margin: '0 auto',
         padding: '0 24px',
-        height: '64px',
-        display: 'flex',
+        height: '60px',
+        display: 'grid',
+        gridTemplateColumns: '1fr auto 1fr',
         alignItems: 'center',
-        justifyContent: 'space-between',
+        gap: '24px',
       }}>
+        {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{
-            width: '34px',
-            height: '34px',
-            background: 'linear-gradient(135deg, #00e87a, #00a854)',
-            borderRadius: '10px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '18px',
-            boxShadow: '0 0 16px rgba(0,232,122,0.35)',
+          <HexLogo />
+          <span style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: '22px',
+            fontWeight: 800,
+            letterSpacing: '0.06em',
+            color: 'var(--text-primary)',
+            textTransform: 'uppercase',
           }}>
-            🏀
-          </div>
-          <span style={{ fontSize: '20px', fontWeight: 900, color: '#f0f6ff', letterSpacing: '-0.03em' }}>
-            Stat<span style={{ color: '#00e87a' }}>Cast</span>
+            Stat<span style={{ color: 'var(--primary)' }}>Cast</span>
           </span>
           <span style={{
-            fontSize: '10px',
-            fontWeight: 700,
-            color: '#00e87a',
-            background: 'rgba(0,232,122,0.12)',
-            border: '1px solid rgba(0,232,122,0.25)',
-            borderRadius: '4px',
-            padding: '2px 7px',
-            letterSpacing: '0.06em',
-            textTransform: 'uppercase',
-            marginLeft: '4px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '9px',
+            fontWeight: 600,
+            color: 'var(--primary)',
+            background: 'var(--primary-dim)',
+            border: '1px solid rgba(59,130,246,0.22)',
+            borderRadius: '3px',
+            padding: '2px 6px',
+            letterSpacing: '0.12em',
           }}>
             BETA
           </span>
         </div>
 
-        <nav style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-          {navLink('Predictions', 'predictions')}
-          {navLink('Bracket', 'bracket')}
-          <div style={{ width: '1px', height: '20px', background: '#1e2d40', margin: '0 8px' }} />
-          <a
-            href="https://www.nba.com/stats"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              color: '#f0f6ff',
-              fontSize: '13px',
-              fontWeight: 600,
-              padding: '7px 16px',
-              background: 'linear-gradient(135deg, #00e87a18, #00e87a0a)',
-              border: '1px solid rgba(0,232,122,0.35)',
-              borderRadius: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              textDecoration: 'none',
-            }}
-          >
-            <span style={{ color: '#00e87a' }}>●</span> Live Data
-          </a>
+        {/* Center nav */}
+        <nav style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+          <NavButton label="Predictions" target="predictions" view={view} onChange={onChange} />
+          <NavButton label="Bracket" target="bracket" view={view} onChange={onChange} />
         </nav>
+
+        {/* Right: live indicator */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <span style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '10px',
+            color: 'var(--text-muted)',
+            letterSpacing: '0.08em',
+          }}>
+            <span style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              background: 'var(--success)',
+              boxShadow: '0 0 8px var(--success)',
+              animation: 'pulse-dot 2.5s ease-in-out infinite',
+              display: 'inline-block',
+              flexShrink: 0,
+            }} />
+            NBA · LIVE DATA
+          </span>
+        </div>
       </div>
     </header>
   );
 }
 
-function App() {
+export default function App() {
   const [view, setView] = useState<View>('predictions');
 
   return (
-    <div style={{ minHeight: '100vh', background: '#080f1a' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
       <Header view={view} onChange={setView} />
       {view === 'predictions' ? <Home /> : <Bracket />}
     </div>
   );
 }
-
-export default App;

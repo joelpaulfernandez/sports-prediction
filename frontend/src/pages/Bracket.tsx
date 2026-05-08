@@ -3,7 +3,7 @@ import type { PlayoffBracket, BracketSeries, BracketGame } from '../types/bracke
 import { getBracket } from '../api/predictions';
 
 // ── Tiny team logo ──────────────────────────────────────────────────────────
-function TeamLogo({ teamId, size = 28 }: { teamId: number; size?: number }) {
+function TeamLogo({ teamId, size = 24 }: { teamId: number; size?: number }) {
   return (
     <img
       src={`https://cdn.nba.com/logos/nba/${teamId}/global/L/logo.svg`}
@@ -18,14 +18,14 @@ function TeamLogo({ teamId, size = 28 }: { teamId: number; size?: number }) {
 // ── Game badge — small ✓/✗ marker per game in a series ──────────────────────
 function GameBadge({ game }: { game: BracketGame }) {
   const colors = game.correct === true
-    ? { bg: 'rgba(0,232,122,0.18)', border: 'rgba(0,232,122,0.5)', fg: '#00e87a', label: '✓' }
+    ? { bg: 'var(--success-dim)', border: 'rgba(16,185,129,0.5)', fg: 'var(--success)', label: '✓' }
     : game.correct === false
-    ? { bg: 'rgba(248,113,113,0.18)', border: 'rgba(248,113,113,0.5)', fg: '#f87171', label: '✗' }
-    : { bg: 'rgba(74,96,117,0.15)', border: 'rgba(74,96,117,0.4)', fg: '#4a6075', label: '·' };
+    ? { bg: 'var(--error-dim)', border: 'rgba(239,68,68,0.5)', fg: 'var(--error)', label: '✗' }
+    : { bg: 'rgba(100,116,139,0.10)', border: 'var(--border)', fg: 'var(--text-muted)', label: '·' };
 
   const tooltip = game.predicted_winner_name
-    ? `Game ${game.date}: predicted ${game.predicted_winner_name} (${Math.round((game.confidence ?? 0) * 100)}%) — ${game.correct ? 'correct' : 'wrong'}`
-    : `Game ${game.date}: no prediction recorded`;
+    ? `${game.date}: predicted ${game.predicted_winner_name} (${Math.round((game.confidence ?? 0) * 100)}%) — ${game.correct ? 'correct' : 'wrong'}`
+    : `${game.date}: no prediction recorded`;
 
   return (
     <span
@@ -40,8 +40,9 @@ function GameBadge({ game }: { game: BracketGame }) {
         border: `1px solid ${colors.border}`,
         color: colors.fg,
         borderRadius: '4px',
+        fontFamily: 'var(--font-mono)',
         fontSize: '11px',
-        fontWeight: 800,
+        fontWeight: 700,
         lineHeight: 1,
       }}
     >
@@ -63,16 +64,17 @@ function SeriesCard({ series }: { series: BracketSeries }) {
       alignItems: 'center',
       justifyContent: 'space-between',
       padding: '6px 10px',
-      borderRadius: '6px',
-      background: won ? 'rgba(0,232,122,0.06)' : 'transparent',
-      opacity: dim ? 0.5 : 1,
+      borderRadius: '4px',
+      background: won ? 'var(--primary-dim)' : 'transparent',
+      opacity: dim ? 0.45 : 1,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-        <TeamLogo teamId={team.team_id} size={24} />
+        <TeamLogo teamId={team.team_id} size={22} />
         <span style={{
-          color: won ? '#f0f6ff' : '#8ca3be',
+          fontFamily: 'var(--font-body)',
+          color: won ? 'var(--text-primary)' : 'var(--text-secondary)',
           fontSize: '12px',
-          fontWeight: won ? 700 : 500,
+          fontWeight: won ? 600 : 500,
           whiteSpace: 'nowrap',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
@@ -81,9 +83,10 @@ function SeriesCard({ series }: { series: BracketSeries }) {
         </span>
       </div>
       <span style={{
-        color: won ? '#00e87a' : '#4a6075',
+        fontFamily: 'var(--font-mono)',
+        color: won ? 'var(--primary)' : 'var(--text-muted)',
         fontSize: '14px',
-        fontWeight: 800,
+        fontWeight: 700,
         flexShrink: 0,
         marginLeft: '8px',
       }}>
@@ -94,24 +97,23 @@ function SeriesCard({ series }: { series: BracketSeries }) {
 
   return (
     <div style={{
-      background: 'linear-gradient(160deg, #131f2e 0%, #0f1923 100%)',
-      border: '1px solid #1e2d40',
-      borderRadius: '10px',
-      padding: '10px',
+      background: 'var(--card)',
+      border: '1px solid var(--border)',
+      borderRadius: '8px',
+      padding: '8px',
       display: 'flex',
       flexDirection: 'column',
-      gap: '4px',
+      gap: '2px',
       minWidth: '200px',
     }}>
       {teamRow(higher_seed, higherWon, isComplete && lowerWon)}
       {teamRow(lower_seed, lowerWon, isComplete && higherWon)}
 
-      {/* Game-by-game prediction badges */}
       {games.length > 0 && (
         <div style={{
           marginTop: '6px',
           paddingTop: '8px',
-          borderTop: '1px solid #1a2535',
+          borderTop: '1px solid var(--border)',
           display: 'flex',
           gap: '4px',
           alignItems: 'center',
@@ -136,14 +138,15 @@ function RoundColumn({ name, seriesList }: { name: string; seriesList: BracketSe
       minWidth: '210px',
     }}>
       <div style={{
+        fontFamily: 'var(--font-mono)',
         textAlign: 'center',
-        color: '#4a6075',
-        fontSize: '11px',
-        fontWeight: 800,
+        color: 'var(--text-muted)',
+        fontSize: '10px',
+        fontWeight: 700,
         textTransform: 'uppercase',
-        letterSpacing: '0.12em',
+        letterSpacing: '0.14em',
         paddingBottom: '8px',
-        borderBottom: '1px solid #1a2535',
+        borderBottom: '1px solid var(--border)',
       }}>
         {name}
       </div>
@@ -156,18 +159,47 @@ function RoundColumn({ name, seriesList }: { name: string; seriesList: BracketSe
       }}>
         {seriesList.length === 0 ? (
           <div style={{
-            color: '#2d4060',
-            fontSize: '12px',
+            fontFamily: 'var(--font-mono)',
+            color: 'var(--text-muted)',
+            fontSize: '11px',
             textAlign: 'center',
             padding: '40px 0',
+            letterSpacing: '0.08em',
           }}>
-            Not started
+            NOT STARTED
           </div>
         ) : (
           seriesList.map((s, i) => (
             <SeriesCard key={`${s.higher_seed.team_id}-${s.lower_seed.team_id}-${i}`} series={s} />
           ))
         )}
+      </div>
+    </div>
+  );
+}
+
+function StatBlock({ label, value, color = 'var(--text-primary)' }: { label: string; value: string; color?: string }) {
+  return (
+    <div>
+      <div style={{
+        fontFamily: 'var(--font-mono)',
+        color: 'var(--text-muted)',
+        fontSize: '10px',
+        textTransform: 'uppercase',
+        letterSpacing: '0.12em',
+        fontWeight: 600,
+      }}>
+        {label}
+      </div>
+      <div style={{
+        fontFamily: 'var(--font-display)',
+        color,
+        fontSize: '26px',
+        fontWeight: 800,
+        marginTop: '4px',
+        letterSpacing: '-0.01em',
+      }}>
+        {value}
       </div>
     </div>
   );
@@ -188,7 +220,6 @@ export function Bracket() {
     return () => { cancelled = true; };
   }, []);
 
-  // Always render all 4 round columns so the bracket structure is clear
   const allRoundNames = ['First Round', 'Conference Semifinals', 'Conference Finals', 'NBA Finals'];
   const roundsByName = new Map(data?.rounds.map((r) => [r.name, r]) ?? []);
 
@@ -197,99 +228,93 @@ export function Bracket() {
       maxWidth: '1400px',
       margin: '0 auto',
       padding: '0 24px 80px',
+      width: '100%',
       display: 'flex',
       flexDirection: 'column',
     }}>
-      {/* Hero */}
-      <div style={{ padding: '52px 0 24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <div style={{ padding: '52px 0 24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
         <div style={{
           alignSelf: 'flex-start',
-          background: 'rgba(0,232,122,0.1)',
-          border: '1px solid rgba(0,232,122,0.2)',
-          borderRadius: '6px',
+          fontFamily: 'var(--font-mono)',
+          background: 'var(--primary-dim)',
+          border: '1px solid rgba(59,130,246,0.22)',
+          borderRadius: '4px',
           padding: '4px 10px',
-          fontSize: '11px',
-          fontWeight: 700,
-          color: '#00e87a',
+          fontSize: '10px',
+          fontWeight: 600,
+          color: 'var(--primary)',
           textTransform: 'uppercase',
-          letterSpacing: '0.08em',
+          letterSpacing: '0.12em',
         }}>
           {data?.season ?? '2025–26'} Playoffs
         </div>
         <h1 style={{
           margin: 0,
-          fontSize: 'clamp(28px, 4vw, 42px)',
-          fontWeight: 900,
-          color: '#f0f6ff',
-          lineHeight: 1.1,
-          letterSpacing: '-0.03em',
+          fontFamily: 'var(--font-display)',
+          fontSize: 'clamp(32px, 4vw, 48px)',
+          fontWeight: 800,
+          color: 'var(--text-primary)',
+          lineHeight: 1.05,
+          letterSpacing: '-0.02em',
+          textTransform: 'uppercase',
         }}>
           Playoff Bracket
         </h1>
-        <p style={{ margin: 0, color: '#4a6075', fontSize: '15px' }}>
+        <p style={{
+          margin: 0,
+          fontFamily: 'var(--font-body)',
+          color: 'var(--text-secondary)',
+          fontSize: '14px',
+        }}>
           Each game is annotated with the model's prediction.
           {' '}
-          <span style={{ color: '#00e87a' }}>✓</span> = correct,
+          <span style={{ color: 'var(--success)', fontWeight: 600 }}>✓</span> correct,
           {' '}
-          <span style={{ color: '#f87171' }}>✗</span> = wrong,
+          <span style={{ color: 'var(--error)', fontWeight: 600 }}>✗</span> wrong,
           {' '}
-          <span style={{ color: '#4a6075' }}>·</span> = no prediction on file.
+          <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>·</span> no prediction on file.
         </p>
       </div>
 
-      {/* Accuracy summary */}
       {data?.summary && data.summary.games_with_prediction > 0 && (
         <div style={{
           display: 'flex',
-          gap: '24px',
-          background: 'linear-gradient(135deg, #131f2e, #0f1923)',
-          border: '1px solid #1e2d40',
-          borderRadius: '12px',
-          padding: '16px 24px',
+          gap: '32px',
+          background: 'var(--card)',
+          border: '1px solid var(--border)',
+          borderRadius: '8px',
+          padding: '20px 24px',
           marginBottom: '32px',
         }}>
-          <div>
-            <div style={{ color: '#4a6075', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
-              Prediction Accuracy
-            </div>
-            <div style={{ color: '#00e87a', fontSize: '24px', fontWeight: 900, marginTop: '4px' }}>
-              {data.summary.accuracy_pct}%
-            </div>
-          </div>
-          <div style={{ width: '1px', background: '#1e2d40' }} />
-          <div>
-            <div style={{ color: '#4a6075', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
-              Games Predicted
-            </div>
-            <div style={{ color: '#f0f6ff', fontSize: '24px', fontWeight: 900, marginTop: '4px' }}>
-              {data.summary.correct_predictions} / {data.summary.games_with_prediction}
-            </div>
-          </div>
-          <div style={{ width: '1px', background: '#1e2d40' }} />
-          <div>
-            <div style={{ color: '#4a6075', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
-              Total Playoff Games
-            </div>
-            <div style={{ color: '#f0f6ff', fontSize: '24px', fontWeight: 900, marginTop: '4px' }}>
-              {data.summary.total_games}
-            </div>
-          </div>
+          <StatBlock label="Prediction Accuracy" value={`${data.summary.accuracy_pct}%`} color="var(--primary)" />
+          <div style={{ width: '1px', background: 'var(--border)' }} />
+          <StatBlock label="Games Predicted" value={`${data.summary.correct_predictions} / ${data.summary.games_with_prediction}`} />
+          <div style={{ width: '1px', background: 'var(--border)' }} />
+          <StatBlock label="Total Playoff Games" value={String(data.summary.total_games)} />
         </div>
       )}
 
-      {/* Bracket grid */}
       {loading && (
-        <div style={{ padding: '100px 0', textAlign: 'center', color: '#4a6075' }}>
-          Loading bracket…
+        <div style={{
+          padding: '100px 0',
+          textAlign: 'center',
+          fontFamily: 'var(--font-mono)',
+          color: 'var(--text-muted)',
+          fontSize: '12px',
+          letterSpacing: '0.08em',
+        }}>
+          LOADING BRACKET…
         </div>
       )}
       {error && (
         <div style={{
-          background: 'rgba(248,113,113,0.06)',
-          border: '1px solid rgba(248,113,113,0.2)',
-          borderRadius: '12px',
+          background: 'var(--error-dim)',
+          border: '1px solid rgba(239,68,68,0.3)',
+          borderRadius: '8px',
           padding: '20px 24px',
-          color: '#fca5a5',
+          color: 'var(--error)',
+          fontFamily: 'var(--font-body)',
+          fontSize: '14px',
         }}>
           {error}
         </div>

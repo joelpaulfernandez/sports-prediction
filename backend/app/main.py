@@ -99,6 +99,9 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    if scheduler and scheduler.running:
+        scheduler.shutdown()
+
 
 app = FastAPI(
     title="StatCast — Sports Prediction API",
