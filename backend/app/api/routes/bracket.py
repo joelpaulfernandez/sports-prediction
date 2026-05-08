@@ -1,8 +1,20 @@
 """
 Playoff bracket route.
 
-GET /api/bracket  Returns the 2025-26 NBA playoff bracket structured by round,
-                  with each game annotated by our prediction (correct/wrong/none).
+WHAT THIS FILE DOES (in plain English)
+──────────────────────────────────────
+This builds the data behind the Bracket page on the frontend. It answers:
+
+  • Which playoff series have happened or are in progress?
+  • Who's ahead in each series? (e.g. "Thunder lead 2-0 vs Lakers")
+  • Game-by-game, which prediction did we make and was it right?
+
+The frontend turns this into the 4-column bracket layout you see, with green
+✓ / red ✗ / gray dot badges for each game.
+
+Output: JSON grouped by round (First Round → Conf Semis → Conf Finals → Finals),
+with each round containing a list of series, and each series containing the
+games played so far. Cached for 5 minutes so we don't hammer the NBA stats API.
 """
 
 import asyncio
@@ -16,16 +28,20 @@ from app.services.db import get_db
 
 router = APIRouter(prefix="/api", tags=["bracket"])
 
+# NBA playoff structure: 8 first-round series, then 4 semis, 2 conf finals, 1 final.
 ROUND_NAMES = ["First Round", "Conference Semifinals", "Conference Finals", "NBA Finals"]
-ROUND_SIZES = [8, 4, 2, 1]  # number of series per round
+ROUND_SIZES = [8, 4, 2, 1]
 
 
 def _build_bracket(season: str = nba_data.CURRENT_SEASON) -> dict:
+    """Assemble the complete bracket JSON the frontend renders."""
+    # Fetch every playoff game played this season (one big stats API call).
     df = nba_data._fetch_all_playoff_games(season)
     if df is None or df.empty:
         return {"season": season, "rounds": []}
 
-    # Pull all our stored predictions for this season
+    # Pull every prediction we've made (across all dates) so we can join them
+    # against the games below. Keyed by game_id for instant lookup.
     pred_lookup: dict[str, dict] = {}
     try:
         rows = (
@@ -37,12 +53,20 @@ def _build_bracket(season: str = nba_data.CURRENT_SEASON) -> dict:
         )
         pred_lookup = {r["game_id"]: r for r in rows}
     except Exception as exc:
+        # If Supabase is unavailable, fall back to "no predictions on file" —
+        # bracket still renders with gray dots for every game.
         print(f"[bracket] Could not load predictions: {exc}")
 
-    # Cross-reference with the live scoreboard. LeagueGameFinder lags real
-    # game-end by several minutes — its WL and PTS columns may still hold
-    # provisional values right after a buzzer. The live scoreboard is the
-    # ground truth for status and current/final scores.
+    # Also pull the live scoreboard. We need this for two reasons:
+    #
+    # 1. The stats endpoint (LeagueGameFinder) is slow to update right after
+    #    a game ends — its WL column can still say the wrong team won for
+    #    several minutes, and its PTS values may show partial scores. The
+    #    live scoreboard is the source of truth for the final score.
+    #
+    # 2. To detect games that are CURRENTLY in progress so we don't mark them
+    #    as predicted-wrong yet (the model might be picking the team that's
+    #    currently trailing but ends up winning).
     live_lookup: dict[str, dict] = {}
     live_game_ids: set[str] = set()
     try:
@@ -50,29 +74,35 @@ def _build_bracket(season: str = nba_data.CURRENT_SEASON) -> dict:
         for g in live_games:
             gid = str(g["id"])
             live_lookup[gid] = g
-            if int(g.get("status_id", 1)) == 2:
+            if int(g.get("status_id", 1)) == 2:  # status_id 2 = "Live"
                 live_game_ids.add(gid)
     except Exception as exc:
         print(f"[bracket] Could not load live scoreboard: {exc}")
 
-    # Group games by series (sorted team-id pair as key)
+    # Group games into series. Two teams playing each other multiple times
+    # (e.g. Lakers vs Thunder games 1-7) form one series. We use a sorted
+    # tuple of team IDs as the key so we don't accidentally split a series
+    # based on which team was home.
     series_dict: dict[tuple[int, int], list] = {}
     for _, row in df.iterrows():
         key = tuple(sorted([int(row["TEAM_ID_home"]), int(row["TEAM_ID_away"])]))
         series_dict.setdefault(key, []).append(row)
 
-    # Build series objects
+    # ── For each series, build a structured object the frontend can render. ──
     series_list: list[dict] = []
     for series_key, rows in series_dict.items():
+        # Sort the games chronologically so game 1 is first.
         rows_sorted = sorted(rows, key=lambda r: r["GAME_DATE"])
         first_game = rows_sorted[0]
 
-        # Higher seed = home team in game 1 (NBA seeding rule)
+        # By NBA convention, the higher-seeded team hosts game 1.
+        # We use that to label the two teams as "higher seed" / "lower seed".
         higher_id = int(first_game["TEAM_ID_home"])
         lower_id = int(first_game["TEAM_ID_away"])
         higher_name = str(first_game["TEAM_NAME_home"])
         lower_name = str(first_game["TEAM_NAME_away"])
 
+        # Running counts. We'll only increment these for FINISHED games.
         higher_wins = 0
         lower_wins = 0
         games: list[dict] = []
@@ -81,10 +111,11 @@ def _build_bracket(season: str = nba_data.CURRENT_SEASON) -> dict:
             game_id = str(r["GAME_ID"])
             home_id = int(r["TEAM_ID_home"])
             away_id = int(r["TEAM_ID_away"])
-            is_live = game_id in live_game_ids
+            is_live = game_id in live_game_ids  # True if game is still in progress
 
-            # Prefer live scoreboard scores when available — LeagueGameFinder
-            # holds stale Q3/Q4 partials for several minutes post-buzzer.
+            # Pull the score. We try the live scoreboard FIRST (most current),
+            # and fall back to the stats endpoint if live data isn't available.
+            # _safe_int handles weird values like "N/A" or "" without crashing.
             live = live_lookup.get(game_id)
             home_pts: Optional[int] = None
             away_pts: Optional[int] = None
@@ -95,14 +126,17 @@ def _build_bracket(season: str = nba_data.CURRENT_SEASON) -> dict:
                 home_pts = _safe_int(r.get("PTS_home"))
                 away_pts = _safe_int(r.get("PTS_away"))
 
-            # Determine winner from points rather than the WL column. WL can lag
-            # the box score by several minutes for just-finished games.
+            # Decide who won by comparing points directly. We could use the
+            # WL ("W"/"L") column from stats but that lags the actual buzzer.
             home_won = (
                 home_pts > away_pts
                 if home_pts is not None and away_pts is not None
                 else None
             )
 
+            # Resolve the actual winner only if the game is truly finished.
+            # For live games we leave winner=None — the bracket badge will
+            # show as a gray dot rather than committing to right/wrong.
             actual_winner_id: Optional[int] = None
             actual_winner_name: Optional[str] = None
             if not is_live and home_won is not None:
@@ -111,17 +145,22 @@ def _build_bracket(season: str = nba_data.CURRENT_SEASON) -> dict:
                     str(r["TEAM_NAME_home"]) if home_won else str(r["TEAM_NAME_away"])
                 )
 
-            # Only count completed games toward the series score
+            # Bump the series score only when this game is fully decided.
             if actual_winner_id is not None:
                 if actual_winner_id == higher_id:
                     higher_wins += 1
                 else:
                     lower_wins += 1
 
+            # Did we predict this game? Pull our stored prediction (if any).
             pred = pred_lookup.get(game_id)
             predicted_winner_name = pred.get("predicted_winner") if pred else None
             confidence = pred.get("confidence") if pred else None
 
+            # The "correct" flag drives the green ✓ / red ✗ / gray dot badge.
+            #   None  → no answer yet (live game OR no prediction on file)
+            #   True  → we picked the right team
+            #   False → we picked the loser
             correct: Optional[bool]
             if is_live or predicted_winner_name is None or actual_winner_name is None:
                 correct = None
@@ -143,6 +182,8 @@ def _build_bracket(season: str = nba_data.CURRENT_SEASON) -> dict:
                 "correct": correct,
             })
 
+        # NBA playoff series are best-of-7. First team to 4 wins is the
+        # series winner. If neither team has 4 yet, the series is ongoing.
         series_winner_id = (
             higher_id if higher_wins >= 4 else (lower_id if lower_wins >= 4 else None)
         )
@@ -163,7 +204,10 @@ def _build_bracket(season: str = nba_data.CURRENT_SEASON) -> dict:
             "games": games,
         })
 
-    # Assign rounds based on first-game-date ordering (NBA rounds happen sequentially)
+    # ── Sort series by their start date and split into rounds. ──
+    # NBA rounds run sequentially: all 8 first-round series start before
+    # any second-round series starts. So we just sort by start date and
+    # take the first 8 → first round, next 4 → semis, etc.
     series_list.sort(key=lambda s: s["first_game_date"])
 
     rounds: list[dict] = []
@@ -177,9 +221,10 @@ def _build_bracket(season: str = nba_data.CURRENT_SEASON) -> dict:
             "series": bucket,
         })
         if idx >= len(series_list):
-            break
+            break  # later rounds haven't started yet — stop
 
-    # Compute prediction accuracy across the bracket
+    # Top-of-page summary stats: total games played, how many we predicted,
+    # how many we got right, and our hit rate.
     all_games = [g for s in series_list for g in s["games"]]
     total_with_pred = sum(1 for g in all_games if g["correct"] is not None)
     correct = sum(1 for g in all_games if g["correct"] is True)
