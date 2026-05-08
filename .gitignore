@@ -3,6 +3,7 @@ node_modules/
 __pycache__/
 *.pyc
 *.pkl
+!backend/app/data/f1_model.pkl
 venv/
 .DS_Store
 dist/

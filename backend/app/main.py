@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import predictions, accuracy, bracket
+from app.api.routes import f1 as f1_routes
 from app.config import get_settings
 from app.services.prediction_engine import get_prediction_engine
 from app.services import nba_data
@@ -55,6 +56,28 @@ async def _refresh_predictions():
         print(f"[warming] Refresh failed: {exc}")
 
 
+async def _auto_train_f1():
+    """Train F1 ranker in background if no model file present (~5 min)."""
+    try:
+        from app.services.f1_model_trainer import train_f1_and_save, get_f1_model_path
+        import os
+        if os.path.exists(get_f1_model_path()):
+            return
+        print("[startup] Starting F1 model training (~5 min)…")
+        result = await asyncio.to_thread(train_f1_and_save)
+        if result:
+            from app.services.f1_prediction_engine import get_f1_prediction_engine
+            get_f1_prediction_engine().reload_model()
+            metrics = result.get("validation_metrics", {})
+            print(
+                f"[startup] F1 training done — "
+                f"winner_acc: {metrics.get('winner_accuracy', '?')}, "
+                f"spearman: {metrics.get('avg_spearman', '?')}"
+            )
+    except Exception as exc:
+        print(f"[startup] F1 training failed: {exc}")
+
+
 async def _nightly_retrain():
     """Retrain XGBoost on historical seasons + current season completed games."""
     print("[retrain] Nightly retrain starting…")
@@ -86,6 +109,7 @@ async def lifespan(app: FastAPI):
         )
 
     asyncio.create_task(_resolve_yesterday())
+    asyncio.create_task(_auto_train_f1())
 
     # Pre-warm the prediction cache so the first user request is instant
     asyncio.create_task(_refresh_predictions())
@@ -134,6 +158,7 @@ app.add_middleware(
 app.include_router(predictions.router)
 app.include_router(accuracy.router)
 app.include_router(bracket.router)
+app.include_router(f1_routes.router)
 
 
 @app.get("/", tags=["health"])
