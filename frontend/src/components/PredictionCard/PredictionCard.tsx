@@ -7,7 +7,7 @@ interface Props {
 
 // ── Confidence ring ──────────────────────────────────────────────────────────
 
-function ConfidenceRing({ value, delay = 0 }: { value: number; delay?: number }) {
+function ConfidenceRing({ value, delay = 0, locked = false }: { value: number; delay?: number; locked?: boolean }) {
   const r = 44;
   const circumference = 2 * Math.PI * r; // ≈ 276.46
   const offset = circumference * (1 - value);
@@ -62,8 +62,9 @@ function ConfidenceRing({ value, delay = 0 }: { value: number; delay?: number })
         color: 'var(--text-muted)',
         letterSpacing: '0.12em',
         textTransform: 'uppercase',
+        textAlign: 'center',
       }}>
-        Confidence
+        {locked ? 'Pre-tip-off Confidence' : 'Confidence'}
       </span>
     </div>
   );
@@ -250,7 +251,7 @@ export function PredictionCard({ prediction, index = 0 }: Props) {
     predicted_winner, confidence,
     predicted_home_score, predicted_away_score,
     reasons, game_date, status,
-    home_pts, away_pts, game_time_utc,
+    home_pts, away_pts, game_time_utc, pregame_locked,
     home_stats, away_stats, model_version,
   } = prediction;
 
@@ -377,8 +378,16 @@ export function PredictionCard({ prediction, index = 0 }: Props) {
                 }}>
                   {away_pts}
                 </span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
-                  pred. {predicted_away_score}
+                <span style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: 'var(--text-secondary)',
+                  letterSpacing: '0.06em',
+                  marginTop: '2px',
+                }}>
+                  <span style={{ color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: '9px', letterSpacing: '0.12em' }}>Predicted </span>
+                  {predicted_away_score}
                 </span>
               </>
             ) : (
@@ -436,8 +445,16 @@ export function PredictionCard({ prediction, index = 0 }: Props) {
                 }}>
                   {home_pts}
                 </span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
-                  pred. {predicted_home_score}
+                <span style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: 'var(--text-secondary)',
+                  letterSpacing: '0.06em',
+                  marginTop: '2px',
+                }}>
+                  <span style={{ color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: '9px', letterSpacing: '0.12em' }}>Predicted </span>
+                  {predicted_home_score}
                 </span>
               </>
             ) : (
@@ -467,7 +484,7 @@ export function PredictionCard({ prediction, index = 0 }: Props) {
           border: '1px solid var(--border)',
           borderRadius: '8px',
         }}>
-          <ConfidenceRing value={confidence} delay={index * 80 + 300} />
+          <ConfidenceRing value={confidence} delay={index * 80 + 300} locked={pregame_locked || hasScore} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <span style={{
               fontFamily: 'var(--font-mono)',
