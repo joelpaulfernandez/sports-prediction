@@ -165,7 +165,6 @@ function DriverList({ label, drivers, actual, predicted, side }: {
         {drivers.map(d => {
           const compareDriver = compareList?.find(c => c.driver_id === d.driver_id);
           const samePosition = compareDriver?.position === d.position;
-          const isWinner = d.position === 1;
           const isPodium = d.position <= 3;
           const color = teamColor(d.team);
           const podiumColors = ['var(--accent)', '#C0C0C0', '#CD7F32'];
