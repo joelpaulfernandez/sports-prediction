@@ -8,12 +8,72 @@ interface Sport {
   status: 'live' | 'coming-soon';
   emoji: string;
   accent: string;
+  logoUrl?: string; // optional external SVG; falls back to inline F1Logo or emoji
 }
 
 const SPORTS: Sport[] = [
-  { key: 'nba', name: 'NBA', tagline: 'Basketball — playoffs in progress', status: 'live', emoji: '🏀', accent: '#f59e0b' },
-  { key: 'f1',  name: 'F1',  tagline: 'Formula 1 — race winner predictions',     status: 'coming-soon', emoji: '🏎️', accent: '#ef4444' },
+  {
+    key: 'nba',
+    name: 'NBA',
+    tagline: 'Basketball — playoffs in progress',
+    status: 'live',
+    emoji: '🏀',
+    accent: '#f59e0b',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/en/0/03/National_Basketball_Association_logo.svg',
+  },
+  {
+    key: 'f1',
+    name: 'F1',
+    tagline: 'Formula 1 — race winner predictions',
+    status: 'coming-soon',
+    emoji: '🏎️',
+    accent: '#ef4444',
+  },
 ];
+
+// Inline F1 wordmark — stylized italic "F1" in the F1 red. Used when no
+// external logo is provided so we don't rely on a CDN that might 404.
+function F1Logo({ size = 32 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size * 0.75}
+      viewBox="0 0 100 75"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <text
+        x="0"
+        y="56"
+        fontFamily="var(--font-display), sans-serif"
+        fontSize="64"
+        fontWeight="900"
+        fontStyle="italic"
+        fill="#e10600"
+        letterSpacing="-2"
+      >
+        F1
+      </text>
+    </svg>
+  );
+}
+
+function SportIcon({ sport, size = 32 }: { sport: Sport; size?: number }) {
+  const [imgFailed, setImgFailed] = useState(false);
+
+  if (sport.logoUrl && !imgFailed) {
+    return (
+      <img
+        src={sport.logoUrl}
+        alt={sport.name}
+        style={{ width: size, height: size, objectFit: 'contain', filter: 'brightness(1.05)' }}
+        onError={() => setImgFailed(true)}
+      />
+    );
+  }
+  if (sport.key === 'f1') return <F1Logo size={size} />;
+  return <span style={{ fontSize: size * 0.85 }}>{sport.emoji}</span>;
+}
 
 interface Props {
   onSelectSport: (key: string) => void;
@@ -177,9 +237,8 @@ function SportCard({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: '28px',
         }}>
-          {sport.emoji}
+          <SportIcon sport={sport} size={32} />
         </div>
         {isActive ? (
           nbaStats?.liveCount ? (
