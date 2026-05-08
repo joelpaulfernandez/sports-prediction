@@ -44,19 +44,28 @@ def get_accuracy():
     )
 
 
+RESOLUTION_WINDOW_DAYS = 7  # how far back we'll resolve unmarked predictions
+
+
 @router.post("/accuracy/update", status_code=200)
 async def update_accuracy():
     """
     Resolve any predictions whose game has finished but isn't yet in
-    accuracy_log. Looks at today and yesterday so live games that wrap up are
-    picked up promptly without waiting for tomorrow's startup.
+    accuracy_log. Scans the last RESOLUTION_WINDOW_DAYS days so games delayed
+    or rescheduled past a single day don't get orphaned.
+
+    Uses explicit UTC because game_date in Supabase is set from gameTimeUTC[:10]
+    — anchoring to server-local time would skew on UTC-offset servers.
     """
     import asyncio
     from app.services import nba_data
 
     db = get_db()
-    today = datetime.date.today()
-    target_dates = [str(today - datetime.timedelta(days=1)), str(today)]
+    today = datetime.datetime.now(tz=timezone.utc).date()
+    target_dates = [
+        str(today - datetime.timedelta(days=i))
+        for i in range(RESOLUTION_WINDOW_DAYS)
+    ]
 
     # Pull all stored predictions for those dates
     predictions = (
@@ -67,9 +76,12 @@ async def update_accuracy():
         .data
     )
     if not predictions:
-        return {"updated": 0, "message": f"No predictions stored for {target_dates}"}
+        return {"updated": 0, "message": f"No predictions stored in window {target_dates[-1]}..{target_dates[0]}"}
 
-    # Fetch finished games per date and aggregate winners
+    # Fetch finished games per date and aggregate winners. We track which side
+    # (home or away) won rather than the team name, so the prediction's
+    # "predicted side" and the actual winning side can be compared with no
+    # cross-source string matching ("LA Lakers" vs "Los Angeles Lakers").
     actual_winners: dict[str, dict] = {}
     for d in target_dates:
         try:
@@ -84,11 +96,12 @@ async def update_accuracy():
             away_pts = game.get("away_pts")
             if home_pts is None or away_pts is None:
                 continue
-            winner = (
-                game["home_team_name"] if home_pts > away_pts
-                else game["away_team_name"]
-            )
-            actual_winners[str(game["id"])] = {"winner": winner, "date": d}
+            home_won = home_pts > away_pts
+            actual_winners[str(game["id"])] = {
+                "home_won": home_won,
+                "winner_name": game["home_team_name"] if home_won else game["away_team_name"],
+                "date": d,
+            }
 
     if not actual_winners:
         return {"updated": 0, "message": "No newly finished games to resolve"}
@@ -108,14 +121,20 @@ async def update_accuracy():
         if gid in already_logged or gid not in actual_winners:
             continue
         info = actual_winners[gid]
+        # The prediction record carries home_team, away_team, and predicted_winner
+        # all sourced from the same row, so comparing predicted_winner to home_team
+        # is a safe local string comparison. We then compare "side" (home vs away)
+        # to the actual winning side, which is robust to name format differences.
+        predicted_home = pred.get("predicted_winner") == pred.get("home_team")
+        is_correct = predicted_home == info["home_won"]
         rows_to_insert.append({
             "game_id": gid,
             "game_date": info["date"],
             "home_team": pred["home_team"],
             "away_team": pred["away_team"],
             "predicted_winner": pred["predicted_winner"],
-            "actual_winner": info["winner"],
-            "correct": pred["predicted_winner"] == info["winner"],
+            "actual_winner": info["winner_name"],
+            "correct": is_correct,
             "confidence": pred.get("confidence"),
             "timestamp": datetime.datetime.now(tz=timezone.utc).isoformat(),
         })

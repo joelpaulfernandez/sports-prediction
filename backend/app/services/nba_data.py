@@ -27,6 +27,29 @@ def _sleep():
     time.sleep(0.65)
 
 
+# NBA GAME_ID format: 10-digit string where index 2 encodes season type.
+# 0021xxxxxx = Preseason, 0022xxxxxx = Regular Season, 0042xxxxxx = Playoffs,
+# 0052xxxxxx = Play-in. We check this to derive is_playoff cheaply, but if
+# the format ever changes the assertion below will surface it loudly.
+_VALID_GAME_ID_PREFIXES = {"1", "2", "4", "5"}
+
+
+def is_playoff_game_id(game_id: str | int) -> bool:
+    """
+    True if `game_id` follows the NBA convention for a playoff game.
+    Pads ints to the canonical 10-digit form so callers don't have to.
+    Logs a warning (rather than raising) on unexpected formats so a future
+    NBA schema change surfaces in logs without breaking inference.
+    """
+    s = str(game_id)
+    if s.isdigit():
+        s = s.zfill(10)
+    if len(s) < 3 or s[2:3] not in _VALID_GAME_ID_PREFIXES:
+        print(f"[nba_data] WARNING: unexpected GAME_ID format: {game_id!r}")
+        return False
+    return s[2:3] == "4"
+
+
 # ---------------------------------------------------------------------------
 # Today's games
 # ---------------------------------------------------------------------------
@@ -496,11 +519,11 @@ def compute_h2h_features(
     last = h2h.iloc[-1]
     home_won_last = 1.0 if last["WL"] == "W" else -1.0
 
-    # Series lead — only meaningful for playoff games. NBA playoff GAME_IDs
-    # have '4' at index 2 (e.g. "0042500131").
+    # Series lead — only meaningful for playoff games. Uses the same
+    # GAME_ID convention helper as the inference path.
     series_lead = 0.0
     if is_playoff:
-        h2h_playoff = h2h[h2h["GAME_ID"].astype(str).str[2:3] == "4"]
+        h2h_playoff = h2h[h2h["GAME_ID"].astype(str).map(is_playoff_game_id)]
         if not h2h_playoff.empty:
             home_wins = int((h2h_playoff["WL"] == "W").sum())
             away_wins = int((h2h_playoff["WL"] == "L").sum())

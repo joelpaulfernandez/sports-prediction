@@ -130,7 +130,7 @@ async def _build_prediction(
 
     from app.services import player_availability
 
-    is_playoff = str(game["id"])[2:3] == "4"
+    is_playoff = nba_data.is_playoff_game_id(game["id"])
 
     h_recent, a_recent, h_avail, a_avail, h_splits, a_splits, h2h = await asyncio.gather(
         asyncio.to_thread(nba_data.compute_team_recent_form, home_id, game_log, 10),

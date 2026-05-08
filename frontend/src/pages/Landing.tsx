@@ -87,13 +87,24 @@ export function Landing({ onSelectSport }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([getGames(), getAccuracy()])
-      .then(([games, acc]) => {
-        if (cancelled) return;
+    // Run independently so a failed accuracy call doesn't blank out game
+    // counts (or vice versa). Both endpoints can fail without crashing the page.
+    getGames()
+      .then((games) => {
+        if (cancelled || !Array.isArray(games)) return;
         setNbaGameCount(games.length);
-        setNbaLiveCount(games.filter(g => g.status === 'live').length);
-        setAccuracyPct(acc.accuracy_percentage);
-        setTotalPredictions(acc.total_predictions);
+        setNbaLiveCount(games.filter((g) => g?.status === 'live').length);
+      })
+      .catch(() => {});
+    getAccuracy()
+      .then((acc) => {
+        if (cancelled || !acc) return;
+        if (typeof acc.accuracy_percentage === 'number') {
+          setAccuracyPct(acc.accuracy_percentage);
+        }
+        if (typeof acc.total_predictions === 'number') {
+          setTotalPredictions(acc.total_predictions);
+        }
       })
       .catch(() => {});
     return () => { cancelled = true; };
