@@ -86,12 +86,14 @@ def _build_bracket(season: str = nba_data.CURRENT_SEASON) -> dict:
             # Prefer live scoreboard scores when available — LeagueGameFinder
             # holds stale Q3/Q4 partials for several minutes post-buzzer.
             live = live_lookup.get(game_id)
+            home_pts: Optional[int] = None
+            away_pts: Optional[int] = None
             if live and live.get("home_pts") is not None and live.get("away_pts") is not None:
-                home_pts = int(live["home_pts"])
-                away_pts = int(live["away_pts"])
-            else:
-                home_pts = int(r["PTS_home"]) if not _isnan(r.get("PTS_home")) else None
-                away_pts = int(r["PTS_away"]) if not _isnan(r.get("PTS_away")) else None
+                home_pts = _safe_int(live["home_pts"])
+                away_pts = _safe_int(live["away_pts"])
+            if home_pts is None or away_pts is None:
+                home_pts = _safe_int(r.get("PTS_home"))
+                away_pts = _safe_int(r.get("PTS_away"))
 
             # Determine winner from points rather than the WL column. WL can lag
             # the box score by several minutes for just-finished games.
@@ -202,10 +204,27 @@ def _isnan(v) -> bool:
         return v is None
 
 
+def _safe_int(v) -> Optional[int]:
+    """
+    Defensive int() coercion. Live and stats endpoints occasionally return
+    non-numeric placeholders ("N/A", "--", "") for missing scores; we'd
+    rather treat those as "no score yet" than crash bracket rendering.
+    """
+    if v is None or _isnan(v):
+        return None
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        try:
+            return int(float(v))
+        except (TypeError, ValueError):
+            return None
+
+
 @router.get("/bracket")
 async def get_bracket():
     """Return the playoff bracket with prediction accuracy per game."""
-    cache_key = "playoff_bracket_v4"
+    cache_key = "playoff_bracket_v5"
     cached = cache_get(cache_key)
     if cached is not None:
         return cached
