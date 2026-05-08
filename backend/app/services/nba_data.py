@@ -414,6 +414,40 @@ def compute_team_recent_form(
     }
 
 
+def compute_home_road_splits(
+    team_id: int,
+    game_log: pd.DataFrame,
+    before_date: Optional[str] = None,
+) -> dict:
+    """
+    Win % at home and on the road for `team_id`.
+    MATCHUP contains "vs." for home games and "@" for away games.
+    """
+    if game_log is None or game_log.empty:
+        return {"home_w_pct": 0.5, "road_w_pct": 0.5}
+
+    team_log = game_log[game_log["TEAM_ID"] == team_id]
+    if before_date:
+        team_log = team_log[team_log["GAME_DATE"] < pd.Timestamp(before_date)]
+
+    if team_log.empty:
+        return {"home_w_pct": 0.5, "road_w_pct": 0.5}
+
+    is_home = team_log["MATCHUP"].str.contains(r" vs\. ", regex=True)
+    home_games = team_log[is_home]
+    road_games = team_log[~is_home]
+
+    home_w_pct = (
+        float((home_games["WL"] == "W").sum() / len(home_games))
+        if len(home_games) > 0 else 0.5
+    )
+    road_w_pct = (
+        float((road_games["WL"] == "W").sum() / len(road_games))
+        if len(road_games) > 0 else 0.5
+    )
+    return {"home_w_pct": home_w_pct, "road_w_pct": road_w_pct}
+
+
 def compute_rest_days(last_game_date: Optional[str], game_date: Optional[str] = None) -> int:
     """Days between last game and upcoming game, capped at 7."""
     if not last_game_date:

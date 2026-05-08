@@ -35,6 +35,22 @@ Player availability features (added in v2)
 23  rotation_size_diff    home rotation_size      - away rotation_size
 24  home_star_min_ratio   absolute home star minutes share (last 3 games)
 25  away_star_min_ratio   absolute away star minutes share
+
+Style / matchup features (added in v3)
+──────────────────────────────────────
+26  home_efg_edge        h_efg - a_opp_efg   (home offense vs away defense eFG)
+27  away_efg_edge        a_efg - h_opp_efg   (away offense vs home defense eFG)
+28  home_ft_edge         h_fta_rate - a_opp_fta_rate
+29  away_ft_edge         a_fta_rate - h_opp_fta_rate
+30  pace_abs_diff        |h_pace - a_pace|   (high-friction matchup signal)
+
+Context features (added in v4)
+──────────────────────────────
+31  home_is_b2b          1.0 if home team played yesterday, else 0.0
+32  away_is_b2b          1.0 if away team played yesterday, else 0.0
+33  home_home_w_pct      home team's win % in home games this season
+34  away_road_w_pct      away team's win % in road games this season
+35  venue_w_pct_diff     home_home_w_pct - away_road_w_pct
 """
 
 import numpy as np
@@ -66,6 +82,16 @@ FEATURE_NAMES = [
     "rotation_size_diff",
     "home_star_min_ratio",
     "away_star_min_ratio",
+    "home_efg_edge",
+    "away_efg_edge",
+    "home_ft_edge",
+    "away_ft_edge",
+    "pace_abs_diff",
+    "home_is_b2b",
+    "away_is_b2b",
+    "home_home_w_pct",
+    "away_road_w_pct",
+    "venue_w_pct_diff",
 ]
 
 N_FEATURES = len(FEATURE_NAMES)
@@ -91,6 +117,8 @@ def build_features(
     is_playoff: bool = False,
     home_avail: dict | None = None,
     away_avail: dict | None = None,
+    home_splits: dict | None = None,
+    away_splits: dict | None = None,
 ) -> np.ndarray:
     """
     Return a float32 array of shape (N_FEATURES,) for a single matchup.
@@ -170,6 +198,18 @@ def build_features(
         h_rot_size - a_rot_size,              # 23 rotation_size_diff
         h_star_ratio,                         # 24 home_star_min_ratio
         a_star_ratio,                         # 25 away_star_min_ratio
+        h_efg - a_oefg,                       # 26 home_efg_edge (offense vs defense)
+        a_efg - h_oefg,                       # 27 away_efg_edge
+        h_fta - _g(a, "opp_fta_rate", 0.25),  # 28 home_ft_edge
+        a_fta - _g(h, "opp_fta_rate", 0.25),  # 29 away_ft_edge
+        abs(h_pace - a_pace),                 # 30 pace_abs_diff
+        # Context features (B2B + venue splits)
+        1.0 if int(home_rest) <= 1 else 0.0,  # 31 home_is_b2b
+        1.0 if int(away_rest) <= 1 else 0.0,  # 32 away_is_b2b
+        _g(home_splits or {}, "home_w_pct", 0.5),   # 33 home_home_w_pct
+        _g(away_splits or {}, "road_w_pct", 0.5),   # 34 away_road_w_pct
+        _g(home_splits or {}, "home_w_pct", 0.5)
+            - _g(away_splits or {}, "road_w_pct", 0.5),  # 35 venue_w_pct_diff
     ], dtype=np.float32)
 
     return features

@@ -225,6 +225,10 @@ def _build_examples_for_type(
         h_avail = avail_index.get_features(home_id, before_date=game_date_str)
         a_avail = avail_index.get_features(away_id, before_date=game_date_str)
 
+        # Home/road splits — computed from games BEFORE this one (no leakage)
+        h_splits = nba_data.compute_home_road_splits(home_id, game_log, before_date=game_date_str)
+        a_splits = nba_data.compute_home_road_splits(away_id, game_log, before_date=game_date_str)
+
         features = build_features(
             h, a,
             h_recent, a_recent,
@@ -233,6 +237,8 @@ def _build_examples_for_type(
             is_playoff=is_playoff,
             home_avail=h_avail,
             away_avail=a_avail,
+            home_splits=h_splits,
+            away_splits=a_splits,
         )
 
         label = 1 if str(row["WL_home"]) == "W" else 0
