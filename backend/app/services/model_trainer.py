@@ -192,6 +192,11 @@ def _build_examples_for_type(
     elo = EloSystem()
     elo.process_game_log(game_log)
 
+    # Build the per-season availability index ONCE and reuse it across every
+    # game in this season — this is the difference between training in 5 minutes
+    # vs an hour.
+    avail_index = player_availability.get_season_availability(season)
+
     for _, row in merged.iterrows():
         home_id = int(row["TEAM_ID_home"])
         away_id = int(row["TEAM_ID_away"])
@@ -217,8 +222,8 @@ def _build_examples_for_type(
         a_elo = elo.get(away_id)
 
         # Player availability — computed from games BEFORE this one (no leakage)
-        h_avail = player_availability.compute_team_availability(home_id, season, before_date=game_date_str)
-        a_avail = player_availability.compute_team_availability(away_id, season, before_date=game_date_str)
+        h_avail = avail_index.get_features(home_id, before_date=game_date_str)
+        a_avail = avail_index.get_features(away_id, before_date=game_date_str)
 
         features = build_features(
             h, a,
