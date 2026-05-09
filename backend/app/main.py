@@ -56,6 +56,17 @@ async def _refresh_predictions():
         print(f"[warming] Refresh failed: {exc}")
 
 
+async def _resolve_f1_accuracy():
+    """Score completed F1 races against stored predictions."""
+    try:
+        from app.api.routes.f1 import resolve_f1_accuracy
+        n = await asyncio.to_thread(resolve_f1_accuracy)
+        if n > 0:
+            print(f"[startup] F1 accuracy: resolved {n} race(s).")
+    except Exception as exc:
+        print(f"[startup] F1 accuracy resolution failed: {exc}")
+
+
 async def _auto_train_f1():
     """Train F1 ranker in background if no model file present (~5 min)."""
     try:
@@ -110,6 +121,7 @@ async def lifespan(app: FastAPI):
 
     asyncio.create_task(_resolve_yesterday())
     asyncio.create_task(_auto_train_f1())
+    asyncio.create_task(_resolve_f1_accuracy())
 
     # Pre-warm the prediction cache so the first user request is instant
     asyncio.create_task(_refresh_predictions())
@@ -142,14 +154,21 @@ app = FastAPI(
 )
 
 _origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
-_frontend_url = get_settings().frontend_url
-if _frontend_url and _frontend_url not in _origins:
-    _origins.append(_frontend_url)
+_settings = get_settings()
+if _settings.frontend_url and _settings.frontend_url not in _origins:
+    _origins.append(_settings.frontend_url)
+
+# Restrict to deploying account's Vercel previews only.
+# Override via ALLOWED_ORIGIN_REGEX env var for other deployments.
+_origin_regex = (
+    _settings.allowed_origin_regex
+    or r"https://sports-prediction-[a-z0-9]+-joelpaulfernandezs-projects\.vercel\.app"
+)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_origin_regex=_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -98,10 +98,12 @@ class F1PredictionEngine:
         if self._ranker is not None:
             raw_scores = self._ranker.predict(X)
         else:
-            # Rule-based fallback: lower grid position = higher score
-            # Add small random noise to avoid ties
-            grid_positions = X[:, 1]  # grid_position feature
-            raw_scores = -grid_positions + np.random.normal(0, 0.1, n_drivers)
+            # Rule-based fallback: grid position determines score.
+            # Deterministic noise seeded from driver index so ties break
+            # the same way on every call for the same input.
+            grid_positions = X[:, 1]
+            rng = np.random.default_rng(seed=int(grid_positions.sum() * 1000) % (2**31))
+            raw_scores = -grid_positions + rng.normal(0, 0.1, n_drivers)
 
         # Temperature-scaled softmax for win probability
         temperature = 0.25 if not is_high_var else 0.40

@@ -130,7 +130,7 @@ export function F1Page() {
                 fontFamily: 'var(--font-mono)', fontSize: '10px',
                 fontWeight: 600, color: 'var(--error)', letterSpacing: '0.1em',
               }}>
-                F1 · 2026 SEASON
+                F1 · {new Date().getFullYear()} SEASON
               </span>
             </div>
 
