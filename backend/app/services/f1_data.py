@@ -1,13 +1,11 @@
 """
-F1 data pipeline — FastF1 + Jolpica (Ergast-compatible) API.
+F1 data pipeline — Jolpica (Ergast-compatible) API.
 
-FastF1 handles session telemetry (qualifying, FP2 long runs).
-Jolpica provides race schedule, results, and driver standings.
-All slow FastF1 pulls are disk-cached by FastF1 itself; processed
-data is cached in Redis/memory via the shared cache layer.
+All data comes from Jolpica (free, no API key). FastF1 has been removed
+to keep the Render 512MB memory budget: fastf1 pulls pyarrow + requests-cache
+(~150MB) and was only used for FP2 data that is excluded from the model anyway.
 """
 
-import os
 import time
 import datetime
 from typing import Optional
@@ -30,8 +28,6 @@ def current_season() -> int:
     """Return the current F1 season year. Called at request time, not import time."""
     return datetime.datetime.now(tz=datetime.timezone.utc).year
 
-# FastF1 disk cache — /tmp survives between requests on Render
-_FF1_CACHE_DIR = os.environ.get("FASTF1_CACHE_DIR", "/tmp/fastf1_cache")
 
 # Overtaking difficulty 1–10 (higher = harder to pass).
 # Values derived from 2018–2024 season average overtakes-per-race data (F1 Stats).
@@ -94,19 +90,6 @@ _CIRCUIT_KEY_MAP = {
 }
 
 HIGH_VARIANCE_CIRCUITS = {"monaco", "baku", "singapore", "jeddah", "las_vegas"}
-
-# ---------------------------------------------------------------------------
-# FastF1 setup
-# ---------------------------------------------------------------------------
-
-def _init_fastf1():
-    try:
-        import fastf1
-        os.makedirs(_FF1_CACHE_DIR, exist_ok=True)
-        fastf1.Cache.enable_cache(_FF1_CACHE_DIR)
-        return fastf1
-    except ImportError:
-        return None
 
 
 # ---------------------------------------------------------------------------
@@ -289,107 +272,6 @@ def _compute_quali_gaps(times: list[str]) -> list[float]:
             # Driver eliminated — estimate gap based on position
             gaps.append(float(i) * 0.5)
     return gaps
-
-
-# ---------------------------------------------------------------------------
-# FastF1 session data
-# ---------------------------------------------------------------------------
-
-def get_fp2_long_run_pace(season: int, round_num: int) -> Optional[pd.DataFrame]:
-    """
-    Extract FP2 long-run pace per driver and constructor.
-    Returns DataFrame with: driver_id, team, median_lap_s, deg_rate, vs_median_delta.
-    Falls back gracefully if FastF1 not available.
-    """
-    key = f"f1:fp2pace:{season}:{round_num}"
-    cached = cache_get(key)
-    if cached is not None:
-        return pd.DataFrame(cached)
-
-    ff1 = _init_fastf1()
-    if ff1 is None:
-        return None
-
-    try:
-        session = ff1.get_session(season, round_num, "FP2")
-        session.load(laps=True, telemetry=False, weather=False, messages=False)
-
-        laps = session.laps
-        if laps is None or laps.empty:
-            return None
-
-        # Filter: accurate laps only, no pit in/out laps, tyre life >= 5
-        accurate = laps[
-            laps["IsAccurate"] &
-            ~laps["PitInTime"].notna() &
-            ~laps["PitOutTime"].notna() &
-            (laps["TyreLife"] >= 5)
-        ].copy()
-
-        if accurate.empty:
-            return None
-
-        accurate["LapTime_s"] = accurate["LapTime"].dt.total_seconds()
-        accurate = accurate[accurate["LapTime_s"] > 0]
-
-        # Long runs: sequences of 5+ consecutive laps on same compound
-        runs = []
-        for driver in accurate["Driver"].unique():
-            d_laps = accurate[accurate["Driver"] == driver].sort_values("LapNumber")
-            compound_groups = []
-            current_group = []
-            prev_compound = None
-            for _, lap in d_laps.iterrows():
-                if lap["Compound"] == prev_compound or not current_group:
-                    current_group.append(lap)
-                    prev_compound = lap["Compound"]
-                else:
-                    if len(current_group) >= 5:
-                        compound_groups.append(current_group[:])
-                    current_group = [lap]
-                    prev_compound = lap["Compound"]
-            if len(current_group) >= 5:
-                compound_groups.append(current_group)
-
-            for group in compound_groups:
-                lap_times = [lap["LapTime_s"] for lap in group]
-                tyre_lives = [lap["TyreLife"] for lap in group]
-                if len(lap_times) < 5:
-                    continue
-
-                # Degradation: slope of lap time vs tyre life (s/lap)
-                try:
-                    deg_rate = float(np.polyfit(tyre_lives, lap_times, 1)[0])
-                except Exception:
-                    deg_rate = 0.0
-
-                runs.append({
-                    "driver_id":   driver,
-                    "team":        group[0]["Team"],
-                    "compound":    group[0]["Compound"],
-                    "median_lap_s": float(np.median(lap_times)),
-                    "deg_rate":    round(deg_rate, 4),
-                    "run_length":  len(lap_times),
-                })
-
-        if not runs:
-            return None
-
-        df = pd.DataFrame(runs)
-
-        # Best long run per driver (lowest median lap)
-        best = df.sort_values("median_lap_s").groupby("driver_id").first().reset_index()
-
-        # Delta vs field median
-        field_median = best["median_lap_s"].median()
-        best["vs_median_delta"] = (best["median_lap_s"] - field_median).round(3)
-
-        cache_set(key, best.to_dict("records"), ttl=3600 * 12)
-        return best
-
-    except Exception as exc:
-        print(f"[f1_data] FP2 long run extraction failed ({season} R{round_num}): {exc}")
-        return None
 
 
 def get_driver_season_dnf_rates(season: int) -> dict[str, float]:

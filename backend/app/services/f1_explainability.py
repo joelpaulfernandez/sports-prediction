@@ -1,27 +1,15 @@
 """
-F1 SHAP-based explainability.
+F1 explainability using XGBoost built-in feature importances.
 
-Generates 3 plain-English reasons for the predicted race leader by mapping
-top SHAP features to human-readable templates. SHAP explainer is cached at
-module level so TreeExplainer is built only once per process, not per request.
+Generates 3 plain-English reasons for the predicted race leader by ranking
+features via model.feature_importances_ (zero extra dependencies — computed
+at training time and available on the loaded model object).
 """
 
 from typing import Optional
 import numpy as np
 
 from app.services.f1_features import F1_FEATURE_NAMES
-
-# Module-level cache: populated on first call, reused for every subsequent request.
-_shap_explainer = None
-
-
-def _get_explainer(model):
-    """Return (or build and cache) the SHAP TreeExplainer for the ranker."""
-    global _shap_explainer
-    if _shap_explainer is None:
-        import shap
-        _shap_explainer = shap.TreeExplainer(model)
-    return _shap_explainer
 
 
 # ---------------------------------------------------------------------------
@@ -61,12 +49,12 @@ def _tpl_rolling_avg(value: float, driver: str, team: str, **_) -> str:
 
 def _tpl_constructor_pace(value: float, driver: str, team: str, compound: str = "medium", **_) -> str:
     if value < -0.3:
-        return f"{team} fastest in FP2 long runs on the {compound} compound ({abs(value):.2f}s ahead of field)"
+        return f"{team} showed strong long-run pace — {abs(value):.2f}s ahead of field median"
     if value < 0.0:
-        return f"{team} showed {abs(value):.2f}s advantage per lap in FP2 long runs"
+        return f"{team} showed {abs(value):.2f}s advantage per lap in long-run pace"
     if value < 0.3:
-        return f"{team} showed competitive FP2 long-run pace — near field median"
-    return f"{team} FP2 long-run pace was {value:.2f}s off the field median"
+        return f"{team} showed competitive long-run pace — near field median"
+    return f"{team} long-run pace was {value:.2f}s off the field median"
 
 
 def _tpl_dnf_risk(value: float, driver: str, team: str, **_) -> str:
@@ -89,10 +77,10 @@ def _tpl_safety_car(value: float, driver: str, team: str, circuit: str = "this c
 
 def _tpl_tyre_deg(value: float, driver: str, team: str, compound: str = "medium", **_) -> str:
     if value <= 0.01:
-        return f"{team} shows minimal tyre degradation on the {compound} compound — longer stint capability"
+        return f"{team} shows minimal tyre degradation — longer stint capability"
     if value <= 0.03:
-        return f"{team} shows manageable {value:.3f}s/lap degradation on the {compound} compound"
-    return f"{team} tyre degradation of {value:.3f}s/lap on the {compound} compound could force early stops"
+        return f"{team} shows manageable {value:.3f}s/lap tyre degradation"
+    return f"{team} tyre degradation of {value:.3f}s/lap could force early stops"
 
 
 def _tpl_teammate_gap(value: float, driver: str, team: str, **_) -> str:
@@ -139,17 +127,18 @@ def generate_f1_reasons(
 ) -> list[str]:
     """
     Return top n_reasons plain-English strings explaining the prediction.
-    Uses SHAP feature attribution when available, falls back to rule-based
-    ordering when SHAP is not installed or fails.
+
+    Uses model.feature_importances_ (XGBoost built-in, zero extra deps) to
+    rank which features mattered most globally, then applies per-driver feature
+    values to produce concrete sentences. Falls back to rule-based ordering
+    when importances are unavailable.
     """
     if n_reasons == 0:
         return []
 
     try:
-        import shap  # noqa: F401  (imported to confirm availability before _get_explainer)
-        explainer = _get_explainer(model)
-        shap_vals = explainer.shap_values(features.reshape(1, -1))[0]
-        ranked_indices = np.argsort(-np.abs(shap_vals))
+        importances = model.feature_importances_
+        ranked_indices = np.argsort(-importances)
         grid_pos = int(round(float(features[1])))
 
         reasons: list[str] = []
@@ -173,18 +162,17 @@ def generate_f1_reasons(
             except Exception:
                 continue
 
-        return reasons[:n_reasons]
-
-    except ImportError:
-        return _rule_based_reasons(driver, team, features, circuit_name, compound, overtaking_difficulty)[:n_reasons]
+        if reasons:
+            return reasons[:n_reasons]
 
     except Exception as exc:
-        print(f"[f1_explainability] SHAP failed: {exc}")
-        return _rule_based_reasons(driver, team, features, circuit_name, compound, overtaking_difficulty)[:n_reasons]
+        print(f"[f1_explainability] feature_importances_ ranking failed: {exc}")
+
+    return _rule_based_reasons(driver, team, features, circuit_name, compound, overtaking_difficulty)[:n_reasons]
 
 
 # ---------------------------------------------------------------------------
-# Rule-based fallback (no SHAP dependency)
+# Rule-based fallback
 # ---------------------------------------------------------------------------
 
 def _rule_based_reasons(
@@ -195,10 +183,6 @@ def _rule_based_reasons(
     compound: str,
     overtaking_difficulty: float,
 ) -> list[str]:
-    """
-    Fallback when SHAP is unavailable. Selects the three most informative
-    reasons based on fixed feature priority rather than model attribution.
-    """
     reasons = []
 
     quali_gap = float(features[0])
@@ -216,7 +200,7 @@ def _rule_based_reasons(
         reasons.append(f"{driver} starts P{grid_pos}")
 
     if pace_delta < -0.2:
-        reasons.append(f"{team} fastest in FP2 long runs on the {compound} compound")
+        reasons.append(f"{team} showed strong long-run pace advantage")
     elif rolling_avg <= 4.0:
         reasons.append(f"{driver} averaged P{rolling_avg:.0f} over the last 5 races — strong form")
     elif overtaking_difficulty >= 8.0:
@@ -229,6 +213,6 @@ def _rule_based_reasons(
     elif dnf_risk <= 0.05:
         reasons.append(f"{team} has a strong reliability record this season")
     else:
-        reasons.append(f"{team} showed competitive pace in FP2 long runs")
+        reasons.append(f"{team} showed competitive pace in recent races")
 
     return reasons
