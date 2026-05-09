@@ -1,9 +1,7 @@
-import axios from 'axios';
+import http from './http';
 import type { GamePrediction, AccuracyStats } from '../types';
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
-});
+const api = http;
 
 // Send the client's local date (YYYY-MM-DD) so the backend uses the right day
 // regardless of server timezone — same as how Google shows local game times.

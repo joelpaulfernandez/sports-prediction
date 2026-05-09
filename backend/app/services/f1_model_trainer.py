@@ -24,8 +24,8 @@ from app.services.f1_features import (
 )
 from app.config import get_settings
 
-TRAINING_SEASONS = f1_data.TRAINING_SEASONS
-VALIDATION_SEASON = 2024
+TRAINING_SEASONS = f1_data.TRAINING_SEASONS  # 2018–2024
+VALIDATION_SEASON = 2025
 F1_MODEL_PATH_KEY = "f1_model_path"
 
 

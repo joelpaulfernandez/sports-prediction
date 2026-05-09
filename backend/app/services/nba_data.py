@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 NBA data service using nba_api (stats.nba.com — completely free, no API key required).
 

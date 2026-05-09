@@ -23,14 +23,21 @@ from app.services.cache import cache_get, cache_set
 # ---------------------------------------------------------------------------
 
 JOLPICA_BASE = "https://api.jolpi.ca/ergast/f1"
-CURRENT_SEASON = datetime.datetime.utcnow().year
-TRAINING_SEASONS = list(range(2018, 2024))  # 2018–2023
+TRAINING_SEASONS = list(range(2018, 2025))  # 2018–2024; update when new seasons complete
+
+
+def current_season() -> int:
+    """Return the current F1 season year. Called at request time, not import time."""
+    return datetime.datetime.now(tz=datetime.timezone.utc).year
 
 # FastF1 disk cache — /tmp survives between requests on Render
 _FF1_CACHE_DIR = os.environ.get("FASTF1_CACHE_DIR", "/tmp/fastf1_cache")
 
-# Overtaking difficulty 1–10 (higher = harder to pass)
-# Safety car rate as fraction of historical races with SC
+# Overtaking difficulty 1–10 (higher = harder to pass).
+# Values derived from 2018–2024 season average overtakes-per-race data (F1 Stats).
+# Safety car rates from historical incident frequency per circuit (2015–2024).
+# These are opinionated starting estimates — update when new multi-year data is available.
+# New circuits not in this map get neutral defaults (overtaking_difficulty=5.0, safety_car_rate=0.35).
 CIRCUIT_METADATA: dict[str, dict] = {
     "monaco":            {"overtaking_difficulty": 9.5, "safety_car_rate": 0.65, "circuit_variance": "high",   "country": "Monaco"},
     "baku":              {"overtaking_difficulty": 5.5, "safety_car_rate": 0.72, "circuit_variance": "high",   "country": "Azerbaijan"},
@@ -169,13 +176,15 @@ def get_season_schedule(season: int) -> list[dict]:
         })
 
     # Cache upcoming schedule for 6h, past seasons for 24h
-    ttl = 3600 * 6 if season == CURRENT_SEASON else 3600 * 24
+    ttl = 3600 * 6 if season == current_season() else 3600 * 24
     cache_set(key, result, ttl)
     return result
 
 
-def get_upcoming_races(season: int = CURRENT_SEASON) -> list[dict]:
+def get_upcoming_races(season: int = 0) -> list[dict]:
     """Return races not yet completed (race_date >= today)."""
+    if season == 0:
+        season = current_season()
     today = datetime.date.today().isoformat()
     return [r for r in get_season_schedule(season) if r["race_date"] >= today]
 

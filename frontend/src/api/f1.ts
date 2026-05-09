@@ -1,9 +1,7 @@
-import axios from 'axios';
+import http from './http';
 import type { F1RaceSummary, F1RacePrediction, F1AccuracyStats, F1RecentResult } from '../types';
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
-});
+const api = http;
 
 export async function getF1Races(): Promise<F1RaceSummary[]> {
   const { data } = await api.get<F1RaceSummary[]>('/f1/races');

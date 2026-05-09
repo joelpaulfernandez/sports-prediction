@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379"
     frontend_url: str = ""
     model_path: str = os.path.join(_DATA_DIR, "model.pkl")
+    f1_admin_token: str = "f1-refresh"
+    allowed_origin_regex: str = ""
 
     model_config = {"env_file": ".env", "case_sensitive": False}
 

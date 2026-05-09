@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { Home } from './pages/Home';
 import { Bracket } from './pages/Bracket';
 import { Landing } from './pages/Landing';
+import { F1Page } from './pages/F1Page';
 import './App.css';
 
-type View = 'landing' | 'predictions' | 'nba-bracket';
-type Sport = 'nba' | 'f1';
+type View = 'landing' | 'nba-predictions' | 'nba-bracket' | 'f1';
 
 function HexLogo() {
   return (
@@ -21,9 +21,14 @@ function HexLogo() {
   );
 }
 
-type NavTarget = 'predictions' | 'nba-bracket';
+type NavTarget = 'nba-predictions' | 'nba-bracket';
 
-function NavButton({ label, target, view, onChange }: { label: string; target: NavTarget; view: View; onChange: (v: View) => void }) {
+function NavButton({ label, target, view, onChange }: {
+  label: string;
+  target: NavTarget;
+  view: View;
+  onChange: (v: View) => void;
+}) {
   const active = view === target;
   return (
     <button
@@ -59,9 +64,12 @@ function NavButton({ label, target, view, onChange }: { label: string; target: N
   );
 }
 
-function Header({ view, activeSport, onChange }: { view: View; activeSport: Sport; onChange: (v: View) => void }) {
-  const onLanding = view === 'landing';
-  const isPredictions = view === 'predictions' || view === 'nba-bracket';
+function Header({ view, onChange }: { view: View; onChange: (v: View) => void }) {
+  const isNba = view === 'nba-predictions' || view === 'nba-bracket';
+  const isF1 = view === 'f1';
+
+  const liveColor = isF1 ? 'var(--error)' : 'var(--success)';
+  const liveLabel = isF1 ? 'F1 · LIVE DATA' : 'NBA · LIVE DATA';
 
   return (
     <header style={{
@@ -83,105 +91,72 @@ function Header({ view, activeSport, onChange }: { view: View; activeSport: Spor
         alignItems: 'center',
         gap: '24px',
       }}>
-        {/* Left: logo (clickable -> home) + breadcrumb */}
+        {/* Left: logo + breadcrumb */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           <button
             onClick={() => onChange('landing')}
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              background: 'transparent',
-              border: 'none',
-              cursor: 'pointer',
-              padding: 0,
-              fontFamily: 'inherit',
-              color: 'inherit',
+              display: 'flex', alignItems: 'center', gap: '10px',
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              padding: 0, fontFamily: 'inherit', color: 'inherit',
             }}
           >
             <HexLogo />
             <span style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: '22px',
-              fontWeight: 800,
-              letterSpacing: '0.06em',
-              color: 'var(--text-primary)',
-              textTransform: 'uppercase',
+              fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800,
+              letterSpacing: '0.06em', color: 'var(--text-primary)', textTransform: 'uppercase',
             }}>
               Stat<span style={{ color: 'var(--primary)' }}>Cast</span>
             </span>
             <span style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: '9px',
-              fontWeight: 600,
-              color: 'var(--primary)',
-              background: 'var(--primary-dim)',
-              border: '1px solid rgba(59,130,246,0.22)',
-              borderRadius: '3px',
-              padding: '2px 6px',
-              letterSpacing: '0.12em',
+              fontFamily: 'var(--font-mono)', fontSize: '9px', fontWeight: 600,
+              color: 'var(--primary)', background: 'var(--primary-dim)',
+              border: '1px solid rgba(59,130,246,0.22)', borderRadius: '3px',
+              padding: '2px 6px', letterSpacing: '0.12em',
             }}>
               BETA
             </span>
           </button>
-          {isPredictions && (
-            <span style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: '11px',
-              color: 'var(--text-muted)',
-              letterSpacing: '0.08em',
-            }}>
+          {(isNba || isF1) && (
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
               <span style={{ color: 'var(--text-secondary)' }}>/</span>
               {' '}
               <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
-                {activeSport === 'f1' ? 'F1' : 'NBA'}
+                {isF1 ? 'F1' : 'NBA'}
               </span>
             </span>
           )}
         </div>
 
-        {/* Center: nav tabs when on a predictions/bracket page */}
+        {/* Center: NBA nav only */}
         <nav style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-          {isPredictions && activeSport === 'nba' && (
+          {isNba && (
             <>
-              <NavButton label="Predictions" target="predictions" view={view} onChange={onChange} />
+              <NavButton label="Predictions" target="nba-predictions" view={view} onChange={onChange} />
               <NavButton label="Bracket" target="nba-bracket" view={view} onChange={onChange} />
             </>
           )}
         </nav>
 
-        {/* Right: contextual indicator */}
+        {/* Right: live indicator */}
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          {onLanding ? (
-            <span style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: '10px',
-              color: 'var(--text-muted)',
-              letterSpacing: '0.08em',
-            }}>
+          {view === 'landing' ? (
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
               AI · LIVE DATA
             </span>
           ) : (
             <span style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '10px',
-              color: 'var(--text-muted)',
-              letterSpacing: '0.08em',
+              display: 'flex', alignItems: 'center', gap: '6px',
+              fontFamily: 'var(--font-mono)', fontSize: '10px',
+              color: 'var(--text-muted)', letterSpacing: '0.08em',
             }}>
               <span style={{
-                width: '6px',
-                height: '6px',
-                borderRadius: '50%',
-                background: 'var(--success)',
-                boxShadow: '0 0 8px var(--success)',
+                width: '6px', height: '6px', borderRadius: '50%',
+                background: liveColor, boxShadow: `0 0 8px ${liveColor}`,
                 animation: 'pulse-dot 2.5s ease-in-out infinite',
-                display: 'inline-block',
-                flexShrink: 0,
+                display: 'inline-block', flexShrink: 0,
               }} />
-              {activeSport === 'f1' ? 'F1' : 'NBA'} · LIVE DATA
+              {liveLabel}
             </span>
           )}
         </div>
@@ -192,26 +167,19 @@ function Header({ view, activeSport, onChange }: { view: View; activeSport: Spor
 
 export default function App() {
   const [view, setView] = useState<View>('landing');
-  const [activeSport, setActiveSport] = useState<Sport>('nba');
 
   const handleSportSelect = (sportKey: string) => {
-    if (sportKey === 'nba' || sportKey === 'f1') {
-      setActiveSport(sportKey as Sport);
-      setView('predictions');
-    }
+    if (sportKey === 'nba') setView('nba-predictions');
+    else if (sportKey === 'f1') setView('f1');
   };
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
-      <Header view={view} activeSport={activeSport} onChange={setView} />
+      <Header view={view} onChange={setView} />
       {view === 'landing' && <Landing onSelectSport={handleSportSelect} />}
-      {view === 'predictions' && (
-        <Home
-          initialTab={activeSport === 'f1' ? 'f1' : 'nba'}
-          onTabChange={tab => setActiveSport(tab === 'f1' ? 'f1' : 'nba')}
-        />
-      )}
+      {view === 'nba-predictions' && <Home />}
       {view === 'nba-bracket' && <Bracket />}
+      {view === 'f1' && <F1Page />}
     </div>
   );
 }

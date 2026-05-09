@@ -1,8 +1,9 @@
 """
 F1 SHAP-based explainability.
 
-Generates 3 plain-English reasons for the predicted race leader
-by mapping top SHAP features to human-readable templates.
+Generates 3 plain-English reasons for the predicted race leader by mapping
+top SHAP features to human-readable templates. SHAP explainer is cached at
+module level so TreeExplainer is built only once per process, not per request.
 """
 
 from typing import Optional
@@ -10,7 +11,23 @@ import numpy as np
 
 from app.services.f1_features import F1_FEATURE_NAMES
 
-# Template map: feature_name → callable(value, driver, team, **ctx) → str
+# Module-level cache: populated on first call, reused for every subsequent request.
+_shap_explainer = None
+
+
+def _get_explainer(model):
+    """Return (or build and cache) the SHAP TreeExplainer for the ranker."""
+    global _shap_explainer
+    if _shap_explainer is None:
+        import shap
+        _shap_explainer = shap.TreeExplainer(model)
+    return _shap_explainer
+
+
+# ---------------------------------------------------------------------------
+# Feature → plain-English templates
+# ---------------------------------------------------------------------------
+
 def _tpl_quali_gap(value: float, driver: str, team: str, **_) -> str:
     if value <= 0.05:
         return f"{driver} starts on pole position"
@@ -93,20 +110,22 @@ def _tpl_high_variance(value: float, driver: str, team: str, circuit: str = "thi
 
 
 _TEMPLATES = {
-    "quali_gap_to_pole":       _tpl_quali_gap,
-    "grid_position":           _tpl_grid,
-    "track_position_value":    _tpl_track_pos,
-    "rolling_avg_finish_5":    _tpl_rolling_avg,
-    "constructor_pace_delta":  _tpl_constructor_pace,
-    "dnf_risk_score":          _tpl_dnf_risk,
-    "safety_car_probability":  _tpl_safety_car,
-    "tyre_deg_rate":           _tpl_tyre_deg,
-    "teammate_quali_gap":      _tpl_teammate_gap,
+    "quali_gap_to_pole":        _tpl_quali_gap,
+    "grid_position":            _tpl_grid,
+    "track_position_value":     _tpl_track_pos,
+    "rolling_avg_finish_5":     _tpl_rolling_avg,
+    "constructor_pace_delta":   _tpl_constructor_pace,
+    "dnf_risk_score":           _tpl_dnf_risk,
+    "safety_car_probability":   _tpl_safety_car,
+    "tyre_deg_rate":            _tpl_tyre_deg,
+    "teammate_quali_gap":       _tpl_teammate_gap,
     "is_high_variance_circuit": _tpl_high_variance,
 }
 
-_SHAP_THRESHOLD = 0.01
 
+# ---------------------------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------------------------
 
 def generate_f1_reasons(
     driver: str,
@@ -119,72 +138,54 @@ def generate_f1_reasons(
     n_reasons: int = 3,
 ) -> list[str]:
     """
-    Run SHAP on model for this driver's features.
-    Return top n_reasons plain-English strings.
+    Return top n_reasons plain-English strings explaining the prediction.
+    Uses SHAP feature attribution when available, falls back to rule-based
+    ordering when SHAP is not installed or fails.
     """
-    reasons = []
+    if n_reasons == 0:
+        return []
 
     try:
-        import shap
-        explainer = shap.TreeExplainer(model)
+        import shap  # noqa: F401  (imported to confirm availability before _get_explainer)
+        explainer = _get_explainer(model)
         shap_vals = explainer.shap_values(features.reshape(1, -1))[0]
-
-        # Sort features by abs SHAP value descending
-        abs_shap = np.abs(shap_vals)
-        ranked_indices = np.argsort(-abs_shap)
-
+        ranked_indices = np.argsort(-np.abs(shap_vals))
         grid_pos = int(round(float(features[1])))
 
+        reasons: list[str] = []
         for idx in ranked_indices:
             if len(reasons) >= n_reasons:
                 break
             fname = F1_FEATURE_NAMES[idx]
-            fval = float(features[idx])
             tpl = _TEMPLATES.get(fname)
             if tpl is None:
                 continue
             try:
                 text = tpl(
-                    fval, driver, team,
+                    float(features[idx]), driver, team,
                     circuit=circuit_name,
                     compound=compound,
                     overtaking_difficulty=overtaking_difficulty,
                     grid_position=grid_pos,
                 )
-                reasons.append(text)
+                if text not in reasons:
+                    reasons.append(text)
             except Exception:
                 continue
 
-        # Pad with fallbacks if fewer than n_reasons meaningful SHAP values
-        if len(reasons) < n_reasons:
-            for idx in ranked_indices:
-                if len(reasons) >= n_reasons:
-                    break
-                fname = F1_FEATURE_NAMES[idx]
-                fval = float(features[idx])
-                tpl = _TEMPLATES.get(fname)
-                if tpl is None:
-                    continue
-                try:
-                    text = tpl(fval, driver, team,
-                               circuit=circuit_name, compound=compound,
-                               overtaking_difficulty=overtaking_difficulty,
-                               grid_position=grid_pos)
-                    if text not in reasons:
-                        reasons.append(text)
-                except Exception:
-                    continue
+        return reasons[:n_reasons]
 
     except ImportError:
-        # SHAP not available — fall back to rule-based reasons
-        reasons = _rule_based_reasons(driver, team, features, circuit_name, compound, overtaking_difficulty)
+        return _rule_based_reasons(driver, team, features, circuit_name, compound, overtaking_difficulty)[:n_reasons]
 
     except Exception as exc:
         print(f"[f1_explainability] SHAP failed: {exc}")
-        reasons = _rule_based_reasons(driver, team, features, circuit_name, compound, overtaking_difficulty)
+        return _rule_based_reasons(driver, team, features, circuit_name, compound, overtaking_difficulty)[:n_reasons]
 
-    return reasons[:n_reasons]
 
+# ---------------------------------------------------------------------------
+# Rule-based fallback (no SHAP dependency)
+# ---------------------------------------------------------------------------
 
 def _rule_based_reasons(
     driver: str,
@@ -194,7 +195,10 @@ def _rule_based_reasons(
     compound: str,
     overtaking_difficulty: float,
 ) -> list[str]:
-    """Fallback when SHAP is unavailable. Prioritize strongest features."""
+    """
+    Fallback when SHAP is unavailable. Selects the three most informative
+    reasons based on fixed feature priority rather than model attribution.
+    """
     reasons = []
 
     quali_gap = float(features[0])
@@ -227,4 +231,4 @@ def _rule_based_reasons(
     else:
         reasons.append(f"{team} showed competitive pace in FP2 long runs")
 
-    return reasons[:3]
+    return reasons

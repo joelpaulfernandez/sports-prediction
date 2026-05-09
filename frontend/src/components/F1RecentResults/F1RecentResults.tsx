@@ -10,10 +10,11 @@ const TEAM_COLORS: Record<string, string> = {
   'McLaren': '#FF8000', 'Aston Martin': '#229971', 'Alpine': '#FF87BC',
   'Williams': '#64C4FF', 'RB': '#6692FF', 'Haas': '#B6BABD', 'Kick Sauber': '#52E252',
 };
+const _TEAM_KEYS = Object.keys(TEAM_COLORS);
 function teamColor(team: string): string {
-  for (const [k, v] of Object.entries(TEAM_COLORS)) {
-    if (team.includes(k)) return v;
-  }
+  if (TEAM_COLORS[team]) return TEAM_COLORS[team];
+  const match = _TEAM_KEYS.find(k => team.includes(k));
+  if (match) return TEAM_COLORS[match];
   const hue = team.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
   return `hsl(${hue}, 60%, 55%)`;
 }
