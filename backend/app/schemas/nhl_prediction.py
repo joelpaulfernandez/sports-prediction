@@ -50,3 +50,5 @@ class NHLAccuracyStats(BaseModel):
     accuracy_percentage: float
     last_updated: str
     model_version: str = "nhl-stats-v1"
+    backtest_accuracy: float = 0.586
+    backtest_games: int = 1324

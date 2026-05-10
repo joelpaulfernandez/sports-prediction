@@ -154,34 +154,38 @@ def get_standings() -> dict[str, dict]:
 
 
 def _enrich_standings_with_stats(standings: dict[str, dict]) -> None:
-    """Pull shot/pp/pk/sv% from the club-stats endpoint and merge into standings."""
+    """
+    Compute SV% and shots/game from club-stats goalie/skater player lists.
+
+    The NHL API returns per-player arrays (no team-level aggregates), so we
+    aggregate manually: SV% = total saves / total shots across all goalies.
+    PP/PK% are not available from the public API; those weights are 0.
+    """
     season = _current_season_code()
     for abbrev, team_data in standings.items():
         try:
             data = _get(f"/club-stats/{abbrev}/{season}/2", ttl=7200)
             if not data:
                 continue
-            skater_data = data.get("skaterStats", {})
-            goalie_data = data.get("goalieStats", {})
-            team_stats  = data.get("teamStats", {})
 
+            goalies  = data.get("goalies", [])
+            skaters  = data.get("skaters", [])
             gp = team_data["gp"] or 1
 
-            # shots
-            sf = team_stats.get("shotsForPerGame", 0.0) or skater_data.get("shotsPerGame", 0.0)
-            sa = team_stats.get("shotsAgainstPerGame", 0.0)
-            team_data["shots_for_per_game"]     = round(float(sf), 2)
-            team_data["shots_against_per_game"] = round(float(sa), 2)
+            # SV% — aggregate across all goalies weighted by shots faced
+            total_shots = sum(g.get("shotsAgainst", 0) for g in goalies)
+            total_saves = sum(g.get("saves", 0) for g in goalies)
+            if total_shots > 0:
+                team_data["save_pct"] = round(total_saves / total_shots, 4)
 
-            # pp / pk
-            pp = team_stats.get("powerPlayPct", 0.0) or team_stats.get("powerPlayPctg", 0.0)
-            pk = team_stats.get("penaltyKillPct", 0.0) or team_stats.get("penaltyKillPctg", 0.0)
-            team_data["pp_pct"] = round(float(pp or 0), 4)
-            team_data["pk_pct"] = round(float(pk or 0), 4)
+            # Shots for per game — sum skater shots / GP
+            total_skater_shots = sum(s.get("shots", 0) for s in skaters)
+            if total_skater_shots > 0:
+                team_data["shots_for_per_game"] = round(total_skater_shots / gp, 2)
 
-            # save %
-            sv = goalie_data.get("savePct", 0.0) or goalie_data.get("savePercentage", 0.0)
-            team_data["save_pct"] = round(float(sv or 0), 4)
+            # Shots against per game — derivable from goalie saves + GA
+            if total_shots > 0:
+                team_data["shots_against_per_game"] = round(total_shots / gp, 2)
 
             time.sleep(0.05)
         except Exception as exc:

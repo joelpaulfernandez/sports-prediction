@@ -152,4 +152,6 @@ def _compute_accuracy() -> NHLAccuracyStats:
         correct_predictions=correct,
         accuracy_percentage=round(correct / total * 100, 1) if total else 0.0,
         last_updated=datetime.now(tz=timezone.utc).isoformat(),
+        backtest_accuracy=0.586,
+        backtest_games=1324,
     )

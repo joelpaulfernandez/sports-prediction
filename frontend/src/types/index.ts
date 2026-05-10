@@ -177,6 +177,8 @@ export interface NHLAccuracyStats {
   accuracy_percentage: number;
   last_updated: string;
   model_version?: string;
+  backtest_accuracy: number;
+  backtest_games: number;
 }
 
 export interface F1AccuracyStats {

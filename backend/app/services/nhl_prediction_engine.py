@@ -24,7 +24,7 @@ _MODEL_VERSION = "nhl-stats-v1"
 _W_HOME_ADV    =  0.30   # raw home ice baseline ~54-55% home wins in NHL
 _W_POINTS_PCT  =  1.80   # points% is most predictive single stat
 _W_GOAL_DIFF   =  0.25   # goal differential per game
-_W_PP          =  0.80   # power play % differential
+_W_PP          =  0.00   # PP% not available from public NHL API — disabled
 _W_SV          =  3.50   # save % is highly predictive (goaltending)
 _W_L10         =  0.60   # recent form (last 10 games win%)
 
