@@ -1,4 +1,4 @@
-import type { NHLGamePrediction, NHLTeamStats } from '../../types';
+import type { NHLGamePrediction } from '../../types';
 
 interface Props {
   game: NHLGamePrediction;
@@ -7,7 +7,7 @@ interface Props {
 
 // ── Team logo ────────────────────────────────────────────────────────────────
 
-function TeamLogo({ abbrev, name, size = 56 }: { abbrev: string; name: string; size?: number }) {
+function TeamLogo({ abbrev, size = 56 }: { abbrev: string; name?: string; size?: number }) {
   const initials = abbrev.slice(0, 3).toUpperCase();
   const hue = abbrev.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
   return (
