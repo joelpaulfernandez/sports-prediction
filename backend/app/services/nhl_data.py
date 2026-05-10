@@ -50,18 +50,19 @@ def get_today_schedule() -> list[dict]:
     if cached is not None:
         return cached
 
-    data = _get("/schedule/now", ttl=120)
+    today = datetime.date.today().isoformat()
+    data = _get(f"/schedule/{today}", ttl=120)
     if not data:
         return []
 
     games = []
     for week in data.get("gameWeek", []):
+        week_date = week.get("date", "")
+        if week_date != today:
+            continue
         for game in week.get("games", []):
             start_utc = game.get("startTimeUTC", "")
-            game_date = start_utc[:10] if start_utc else ""
-            today = datetime.date.today().isoformat()
-            if game_date != today:
-                continue
+            game_date = week_date
 
             state = game.get("gameState", "")
             if state in ("FUT", "PRE"):
