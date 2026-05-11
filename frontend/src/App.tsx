@@ -3,9 +3,10 @@ import { Home } from './pages/Home';
 import { Bracket } from './pages/Bracket';
 import { Landing } from './pages/Landing';
 import { F1Page } from './pages/F1Page';
+import { NHLPage } from './pages/NHLPage';
 import './App.css';
 
-type View = 'landing' | 'nba-predictions' | 'nba-bracket' | 'f1';
+type View = 'landing' | 'nba-predictions' | 'nba-bracket' | 'f1' | 'nhl';
 
 function HexLogo() {
   return (
@@ -21,7 +22,7 @@ function HexLogo() {
   );
 }
 
-type NavTarget = 'nba-predictions' | 'nba-bracket';
+type NavTarget = 'nba-predictions' | 'nba-bracket' | 'nhl';
 
 function NavButton({ label, target, view, onChange }: {
   label: string;
@@ -67,9 +68,10 @@ function NavButton({ label, target, view, onChange }: {
 function Header({ view, onChange }: { view: View; onChange: (v: View) => void }) {
   const isNba = view === 'nba-predictions' || view === 'nba-bracket';
   const isF1 = view === 'f1';
+  const isNhl = view === 'nhl';
 
-  const liveColor = isF1 ? 'var(--error)' : 'var(--success)';
-  const liveLabel = isF1 ? 'F1 · LIVE DATA' : 'NBA · LIVE DATA';
+  const liveColor = isF1 ? 'var(--error)' : isNhl ? '#38bdf8' : 'var(--success)';
+  const liveLabel = isF1 ? 'F1 · LIVE DATA' : isNhl ? 'NHL · LIVE DATA' : 'NBA · LIVE DATA';
 
   return (
     <header style={{
@@ -117,12 +119,12 @@ function Header({ view, onChange }: { view: View; onChange: (v: View) => void })
               BETA
             </span>
           </button>
-          {(isNba || isF1) && (
+          {(isNba || isF1 || isNhl) && (
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
               <span style={{ color: 'var(--text-secondary)' }}>/</span>
               {' '}
               <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
-                {isF1 ? 'F1' : 'NBA'}
+                {isF1 ? 'F1' : isNhl ? 'NHL' : 'NBA'}
               </span>
             </span>
           )}
@@ -171,6 +173,7 @@ export default function App() {
   const handleSportSelect = (sportKey: string) => {
     if (sportKey === 'nba') setView('nba-predictions');
     else if (sportKey === 'f1') setView('f1');
+    else if (sportKey === 'nhl') setView('nhl');
   };
 
   return (
@@ -180,6 +183,7 @@ export default function App() {
       {view === 'nba-predictions' && <Home />}
       {view === 'nba-bracket' && <Bracket />}
       {view === 'f1' && <F1Page />}
+      {view === 'nhl' && <NHLPage />}
     </div>
   );
 }

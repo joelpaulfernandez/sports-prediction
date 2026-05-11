@@ -29,6 +29,15 @@ const SPORTS: Sport[] = [
     emoji: '🏎️',
     accent: '#ef4444',
   },
+  {
+    key: 'nhl',
+    name: 'NHL',
+    tagline: 'Hockey — today\'s game predictions',
+    status: 'live',
+    emoji: '🏒',
+    accent: '#38bdf8',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/en/3/3a/05_NHL_Shield.svg',
+  },
 ];
 
 // Inline F1 wordmark — stylized italic "F1" in the F1 red. Used when no

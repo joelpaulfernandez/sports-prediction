@@ -1,0 +1,1 @@
+export { NHLAccuracyBanner } from './NHLAccuracyBanner';

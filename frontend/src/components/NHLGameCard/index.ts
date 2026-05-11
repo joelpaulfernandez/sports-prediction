@@ -1,0 +1,1 @@
+export { NHLGameCard } from './NHLGameCard';

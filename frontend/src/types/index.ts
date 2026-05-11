@@ -128,6 +128,59 @@ export interface F1RecentResult {
   actual: F1ResultDriver[];
 }
 
+// ── NHL types ─────────────────────────────────────────────────────────────────
+
+export interface NHLTeamStats {
+  wins: number;
+  losses: number;
+  ot_losses: number;
+  points: number;
+  points_pct: number;
+  goals_for_per_game: number;
+  goals_against_per_game: number;
+  pp_pct: number;
+  pk_pct: number;
+  save_pct: number;
+  shots_for_per_game: number;
+  shots_against_per_game: number;
+}
+
+export interface NHLPredictionReason {
+  text: string;
+}
+
+export interface NHLGamePrediction {
+  game_id: string;
+  home_team: string;
+  home_team_abbrev: string;
+  away_team: string;
+  away_team_abbrev: string;
+  game_date: string;
+  game_time_utc?: string | null;
+  status: 'scheduled' | 'live' | 'finished';
+  predicted_winner: string;
+  predicted_winner_abbrev: string;
+  home_win_prob: number;
+  confidence: number;
+  model_confidence: 'high' | 'medium' | 'low';
+  reasons: NHLPredictionReason[];
+  home_stats?: NHLTeamStats | null;
+  away_stats?: NHLTeamStats | null;
+  home_score?: number | null;
+  away_score?: number | null;
+  model_version?: string;
+}
+
+export interface NHLAccuracyStats {
+  total_predictions: number;
+  correct_predictions: number;
+  accuracy_percentage: number;
+  last_updated: string;
+  model_version?: string;
+  backtest_accuracy: number;
+  backtest_games: number;
+}
+
 export interface F1AccuracyStats {
   last_3_races: F1AccuracyBreakdown;
   current_season: F1AccuracyBreakdown;

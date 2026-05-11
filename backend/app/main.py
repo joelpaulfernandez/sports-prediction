@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import predictions, accuracy, bracket
 from app.api.routes import f1 as f1_routes
+from app.api.routes import nhl as nhl_routes
 from app.config import get_settings
 from app.services.prediction_engine import get_prediction_engine
 from app.services import nba_data
@@ -178,6 +179,7 @@ app.include_router(predictions.router)
 app.include_router(accuracy.router)
 app.include_router(bracket.router)
 app.include_router(f1_routes.router)
+app.include_router(nhl_routes.router)
 
 
 @app.get("/", tags=["health"])
